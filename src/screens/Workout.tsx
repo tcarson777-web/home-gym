@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import Stepper from '../components/Stepper'
 import { alertUser, keepScreenOn, unlockAudio } from '../lib/alerts'
 import { db } from '../lib/db'
-import { loadsFor, nextDown, nextUp } from '../lib/equipment'
+import { isWeighted, loadsFor, nextDown, nextUp } from '../lib/equipment'
 import { EXERCISE_BY_ID } from '../lib/exercises'
 import { fmtTime as fmt, repsLabel } from '../lib/format'
 import { EFFORT_OPTIONS, type PlanItem, type Session, type SetLog } from '../lib/types'
@@ -203,10 +203,10 @@ function RepsItem({ item, logged, expanded, loads, onLog, onUndo }: {
   onUndo: (id: number) => void
 }) {
   const ex = EXERCISE_BY_ID.get(item.exerciseId)
-  const weighted = !!ex && (ex.loading === 'barbell' || ex.loading === 'dumbbell' || ex.loading === 'kettlebell')
+  const weighted = !!ex && isWeighted(ex.loading)
   const last = logged[logged.length - 1]
   // First time with no target: start light (empty bar / light dumbbells) and work up.
-  const firstGuess = ex?.loading === 'barbell' ? loads[0] : loads[Math.floor(loads.length * 0.2)]
+  const firstGuess = ex?.loading === 'barbell' || ex?.loading === 'landmine' ? loads[0] : loads[Math.floor(loads.length * 0.2)]
   const startWeight = last?.weight ?? item.targetWeight ?? firstGuess
   const [weight, setWeight] = useState<number | undefined>(startWeight)
   const [reps, setReps] = useState<number>(last?.reps ?? item.repsMax ?? item.reps ?? 8)

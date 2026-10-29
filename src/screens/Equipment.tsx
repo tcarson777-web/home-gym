@@ -1,8 +1,9 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useState } from 'react'
-import { db } from '../lib/db'
+import { db, getProfile } from '../lib/db'
 import { describeEquipment, KIND_INFO } from '../lib/equipment'
 import type { Equipment, EquipmentKind, PlatePair } from '../lib/types'
+import { equipmentUsage, type Usage } from '../lib/usage'
 
 const COMMON_PLATES = [45, 35, 25, 10, 5, 2.5]
 
@@ -24,6 +25,7 @@ function defaults(kind: EquipmentKind): Equipment {
 
 export default function EquipmentScreen() {
   const items = useLiveQuery(() => db.equipment.toArray(), [], [])
+  const usage = useLiveQuery(async () => equipmentUsage(await db.equipment.toArray(), await getProfile()), [], new Map<number, Usage>())
   const [editing, setEditing] = useState<Equipment | null>(null)
   const [picking, setPicking] = useState(false)
 
@@ -61,11 +63,27 @@ export default function EquipmentScreen() {
           <div className="grow">
             <h3>{e.name}</h3>
             <p className="muted small">{describeEquipment(e)}</p>
+            <UsageLine usage={usage.get(e.id!)} />
           </div>
           <span className="muted">›</span>
         </button>
       ))}
       <button className="btn primary big" onClick={() => setPicking(true)}>+ Add equipment</button>
+    </div>
+  )
+}
+
+function UsageLine({ usage }: { usage: Usage | undefined }) {
+  if (!usage) return null
+  if (usage.warning) return <p className="small" style={{ color: 'var(--warn)', marginTop: 4 }}>⚠️ {usage.warning}</p>
+  return (
+    <div className="small" style={{ marginTop: 4 }}>
+      {usage.inPlans.length > 0 ? (
+        <p style={{ color: 'var(--good)' }}>✓ In your workouts: {usage.inPlans.join(', ')}</p>
+      ) : (
+        <p className="muted">Not in your current workouts — kept as a backup option.</p>
+      )}
+      {usage.alternatives.length > 0 && <p className="muted">Also unlocks: {usage.alternatives.join(', ')}</p>}
     </div>
   )
 }
@@ -116,6 +134,23 @@ function EquipmentForm({ initial, onDone }: { initial: Equipment; onDone: () => 
         <h1>{KIND_INFO[e.kind].emoji} {e.id ? 'Edit' : 'Add'}</h1>
         <button className="btn ghost sm" onClick={onDone}>Cancel</button>
       </div>
+
+      <label className="field">
+        Type
+        <select
+          className="input"
+          value={e.kind}
+          onChange={(ev) => {
+            const kind = ev.target.value as EquipmentKind
+            // Fill in sensible defaults for the new type, but keep the name and notes.
+            setE({ ...defaults(kind), id: e.id, name: e.name || KIND_INFO[kind].label, notes: e.notes })
+          }}
+        >
+          {(Object.keys(KIND_INFO) as EquipmentKind[]).map((k) => (
+            <option key={k} value={k}>{KIND_INFO[k].emoji} {KIND_INFO[k].label}</option>
+          ))}
+        </select>
+      </label>
 
       <label className="field">
         Name

@@ -6,6 +6,7 @@ export type EquipmentKind =
   | 'fixed_dumbbells'
   | 'barbell'
   | 'plates'
+  | 'landmine'
   | 'kettlebells'
   | 'bench'
   | 'rack'

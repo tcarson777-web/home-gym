@@ -1,5 +1,5 @@
 import type { Exercise } from './exercises'
-import { nextUp, roundDown } from './equipment'
+import { isWeighted, nextUp, roundDown } from './equipment'
 import type { SetLog } from './types'
 
 // Past performances of one exercise, newest first.
@@ -38,7 +38,7 @@ function hitTarget(p: Performance, scheme: Scheme, reps: number): boolean {
 /** Decide today's weight and reps for one exercise from its history. */
 export function prescribe(ex: Exercise, scheme: Scheme, history: Performance[], loads: number[]): Prescription {
   const last = history[0]
-  const weighted = ex.loading === 'barbell' || ex.loading === 'dumbbell' || ex.loading === 'kettlebell'
+  const weighted = isWeighted(ex.loading)
 
   if (!last || last.sets.length === 0) {
     return {
