@@ -5,6 +5,7 @@ import { alertUser, keepScreenOn, unlockAudio } from '../lib/alerts'
 import { db } from '../lib/db'
 import { loadsFor, nextDown, nextUp } from '../lib/equipment'
 import { EXERCISE_BY_ID } from '../lib/exercises'
+import { fmtTime as fmt, repsLabel } from '../lib/format'
 import { EFFORT_OPTIONS, type PlanItem, type Session, type SetLog } from '../lib/types'
 
 const key = (b: number, i: number) => `${b}:${i}`
@@ -17,18 +18,6 @@ function useNow(active: boolean) {
     return () => clearInterval(t)
   }, [active])
   return now
-}
-
-function fmt(sec: number) {
-  const s = Math.abs(Math.round(sec))
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
-}
-
-function repsLabel(it: PlanItem) {
-  const side = it.perSide ? ' each side' : ''
-  if (it.kind === 'time') return `${it.sets > 1 ? `${it.sets} × ` : ''}${it.seconds}s${side}`
-  const reps = it.repsMax ? `${it.reps}–${it.repsMax}` : `${it.reps}`
-  return `${it.sets} × ${reps}${side}${it.targetWeight ? ` @ ${it.targetWeight} lb` : ''}`
 }
 
 export default function WorkoutScreen({ sessionId, onClose }: { sessionId: number; onClose: () => void }) {
@@ -149,7 +138,7 @@ export default function WorkoutScreen({ sessionId, onClose }: { sessionId: numbe
                 <button className="row between" style={{ background: 'none', border: 0, padding: 0, textAlign: 'left' }} onClick={() => setActiveKey(isActive ? null : k)}>
                   <div className="grow">
                     <h3>{done ? '✓ ' : ''}{it.name}</h3>
-                    <p className="muted small">{repsLabel(it)}{it.kind === 'time' && it.targetWeight ? ` @ ${it.targetWeight} lb each hand` : ''}</p>
+                    <p className="muted small">{repsLabel(it)}</p>
                   </div>
                   {it.restSec > 0 && <span className="pill">rest {fmt(it.restSec)}</span>}
                 </button>
