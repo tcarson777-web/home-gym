@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { barbellLoads, capabilities, dumbbellLoads, loadsFor } from './equipment'
+import { barbellLoads, capabilities, dumbbellLoads, landmineLoads, loadsFor } from './equipment'
+import { equipmentUsage } from './usage'
 import { canDo, EXERCISE_BY_ID } from './exercises'
 import { buildRulesPlan, type PlanContext } from './planner'
 import { prescribe, type Performance } from './progression'
@@ -103,5 +104,39 @@ describe('week status', () => {
   it('is complete with 3 sessions incl. mobility', () => {
     const w = weekStatus([s('2026-10-26T10:00:00', 'strength'), s('2026-10-27T10:00:00', 'mobility'), s('2026-10-28T10:00:00', 'strength')], 3, new Date('2026-10-29T10:00:00'))
     expect(w.complete).toBe(true)
+  })
+})
+
+describe('landmine', () => {
+  const withLandmine: Equipment[] = [...garage, { id: 99, kind: 'landmine', name: 'Landmine' }]
+  const ctx = (equipment: Equipment[], variant: 'A' | 'B'): PlanContext => ({ equipment, profile: DEFAULT_PROFILE, type: 'strength', variant, history: new Map() })
+  const ids = (equipment: Equipment[], variant: 'A' | 'B') => buildRulesPlan(ctx(equipment, variant)).blocks.flatMap((b) => b.items.map((i) => i.exerciseId))
+
+  it('loads plates on one end, starting from the empty bar', () => {
+    const l = landmineLoads(withLandmine)
+    expect(l[0]).toBe(0)
+    expect(l).toContain(2.5)
+    expect(l).toContain(90 + 10) // two 45s + one 10 on the same end
+  })
+  it('needs a barbell', () => {
+    expect(landmineLoads([{ kind: 'landmine', name: 'L' }, { kind: 'plates', name: 'P', plates: [{ weight: 10, pairs: 1 }] }])).toEqual([])
+  })
+  it('shows up on day A as core work when you have one', () => {
+    expect(ids(withLandmine, 'A')).toContain('lm_rotation')
+    expect(ids(garage, 'A')).not.toContain('lm_rotation')
+  })
+  it('becomes the overhead press when there is no rack', () => {
+    const noRack = withLandmine.filter((e) => e.kind !== 'rack')
+    expect(ids(noRack, 'B')).toContain('lm_press')
+    expect(ids(noRack, 'A')).toContain('lm_squat')
+  })
+  it('usage report explains used, unused and unknown equipment', () => {
+    const items: Equipment[] = [...withLandmine, { id: 100, kind: 'other', name: 'Sled' }]
+    const u = equipmentUsage(items, DEFAULT_PROFILE)
+    expect(u.get(99)!.inPlans).toContain('Landmine rotation')
+    expect(u.get(99)!.alternatives).toContain('Half-kneeling landmine press')
+    expect(u.get(100)!.warning).toMatch(/doesn't know/)
+    const lonely = equipmentUsage([{ id: 1, kind: 'landmine', name: 'L' }], DEFAULT_PROFILE)
+    expect(lonely.get(1)!.warning).toMatch(/barbell/)
   })
 })

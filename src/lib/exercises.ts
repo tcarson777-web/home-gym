@@ -1,4 +1,4 @@
-import type { Capability, Loading } from './equipment'
+import { isWeighted, type Capability, type Loading } from './equipment'
 
 export type Pattern =
   | 'squat'
@@ -28,11 +28,13 @@ export interface Exercise {
 export const EXERCISES: Exercise[] = [
   // Squat
   { id: 'bb_back_squat', name: 'Barbell back squat', pattern: 'squat', loading: 'barbell', requires: ['barbell', 'rack'], lowerBody: true, cue: 'Brace, sit between your hips, knees track over toes, drive up.' },
+  { id: 'lm_squat', name: 'Landmine squat', pattern: 'squat', loading: 'landmine', requires: ['barbell', 'landmine'], lowerBody: true, cue: 'Hold the bar end at your chest, lean into it slightly, sit straight down. Weight = plates on the end.' },
   { id: 'db_goblet_squat', name: 'Dumbbell goblet squat', pattern: 'squat', loading: 'dumbbell', requires: ['dumbbell'], lowerBody: true, cue: 'Hold the bell at your chest, elbows inside knees at the bottom.' },
   { id: 'kb_goblet_squat', name: 'Kettlebell goblet squat', pattern: 'squat', loading: 'kettlebell', requires: ['kettlebell'], lowerBody: true, cue: 'Hold the horns at your chest, chest tall, full depth.' },
   { id: 'bw_split_squat', name: 'Split squat', pattern: 'squat', loading: 'bodyweight', requires: [], lowerBody: true, cue: 'Long stance, back knee lowers straight down.' },
   // Hinge
   { id: 'bb_deadlift', name: 'Barbell deadlift', pattern: 'hinge', loading: 'barbell', requires: ['barbell', 'plates'], lowerBody: true, cue: 'Bar over mid-foot, flat back, push the floor away.' },
+  { id: 'lm_rdl', name: 'Landmine Romanian deadlift', pattern: 'hinge', loading: 'landmine', requires: ['barbell', 'landmine'], lowerBody: true, cue: 'Straddle the bar, both hands on the end, hips back with a flat back. Weight = plates on the end.' },
   { id: 'db_rdl', name: 'Dumbbell Romanian deadlift', pattern: 'hinge', loading: 'dumbbell', requires: ['dumbbell'], lowerBody: true, cue: 'Soft knees, push hips back, bells slide down your thighs.' },
   { id: 'kb_rdl', name: 'Kettlebell Romanian deadlift', pattern: 'hinge', loading: 'kettlebell', requires: ['kettlebell'], lowerBody: true, cue: 'Hips back, flat back, stand tall and squeeze glutes.' },
   { id: 'bw_sl_glute_bridge', name: 'Single-leg glute bridge', pattern: 'hinge', loading: 'bodyweight', requires: [], lowerBody: true, cue: 'Drive through the heel, ribs down, pause at the top.' },
@@ -43,11 +45,13 @@ export const EXERCISES: Exercise[] = [
   { id: 'bw_pushup', name: 'Push-up', pattern: 'hpush', loading: 'bodyweight', requires: [], cue: 'Body in a straight line, chest to just above the floor.' },
   // Vertical push
   { id: 'bb_ohp', name: 'Barbell overhead press', pattern: 'vpush', loading: 'barbell', requires: ['barbell', 'rack'], cue: 'Squeeze glutes, press the bar straight up, head through at the top.' },
+  { id: 'lm_press', name: 'Half-kneeling landmine press', pattern: 'vpush', loading: 'landmine', requires: ['barbell', 'landmine'], cue: 'Kneel on the same side as the pressing arm, press up and forward, ribs down. Shoulder-friendly. Reps are per arm.' },
   { id: 'db_shoulder_press', name: 'Dumbbell shoulder press', pattern: 'vpush', loading: 'dumbbell', requires: ['dumbbell'], cue: 'Ribs down, press overhead without arching your back.' },
   { id: 'kb_press', name: 'Kettlebell overhead press', pattern: 'vpush', loading: 'kettlebell', requires: ['kettlebell'], cue: 'Bell rests on forearm, press straight up, one arm at a time.' },
   { id: 'bw_pike_pushup', name: 'Pike push-up', pattern: 'vpush', loading: 'bodyweight', requires: [], cue: 'Hips high, lower your head toward the floor between your hands.' },
   // Horizontal pull
   { id: 'bb_row', name: 'Barbell row', pattern: 'hpull', loading: 'barbell', requires: ['barbell', 'plates'], cue: 'Hinge to ~45°, pull the bar to your belly button.' },
+  { id: 'lm_row', name: 'Landmine row (T-bar)', pattern: 'hpull', loading: 'landmine', requires: ['barbell', 'landmine'], cue: 'Straddle the bar, hinge to ~45°, pull the end to your chest with both hands (a towel or V-handle helps).' },
   { id: 'db_row', name: 'One-arm dumbbell row', pattern: 'hpull', loading: 'dumbbell', requires: ['dumbbell'], cue: 'Brace on a bench or knee, pull elbow to hip. Reps are per arm.' },
   { id: 'kb_row', name: 'Kettlebell row', pattern: 'hpull', loading: 'kettlebell', requires: ['kettlebell'], cue: 'Flat back, pull to hip, lower slowly. Reps are per arm.' },
   { id: 'ring_row', name: 'Ring / suspension row', pattern: 'hpull', loading: 'bodyweight', requires: ['rings'], cue: 'Body straight, pull chest to hands. Walk feet forward to make it harder.' },
@@ -64,6 +68,7 @@ export const EXERCISES: Exercise[] = [
   { id: 'db_farmer_carry', name: 'Farmer carry (dumbbells)', pattern: 'carry', loading: 'dumbbell', requires: ['dumbbell'], cue: 'Heavy bells, tall posture, short quick steps.' },
   { id: 'kb_farmer_carry', name: 'Farmer carry (kettlebells)', pattern: 'carry', loading: 'kettlebell', requires: ['kettlebell'], cue: 'Heavy bells, tall posture, short quick steps.' },
   // Core
+  { id: 'lm_rotation', name: 'Landmine rotation', pattern: 'core', loading: 'landmine', requires: ['barbell', 'landmine'], cue: 'Arms long, swing the bar end hip to hip by turning your torso and pivoting your feet. Start light. Reps are per side.' },
   { id: 'plank', name: 'Plank', pattern: 'core', loading: 'bodyweight', requires: [], cue: 'Squeeze glutes, ribs down, straight line head to heels.' },
   { id: 'dead_bug', name: 'Dead bug', pattern: 'core', loading: 'bodyweight', requires: [], cue: 'Low back pressed into the floor, slowly extend opposite arm and leg.' },
   { id: 'side_plank', name: 'Side plank', pattern: 'core', loading: 'bodyweight', requires: [], cue: 'Hips high, body straight. Time is per side.' },
@@ -104,6 +109,6 @@ export const EXERCISE_BY_ID = new Map(EXERCISES.map((e) => [e.id, e]))
 export function canDo(ex: Exercise, caps: Set<Capability>, loadsAvailable: (l: Loading) => boolean): boolean {
   if (!ex.requires.every((c) => caps.has(c))) return false
   // A dumbbell exercise is useless if no dumbbell weights were entered, etc.
-  if (ex.loading === 'barbell' || ex.loading === 'dumbbell' || ex.loading === 'kettlebell') return loadsAvailable(ex.loading)
+  if (isWeighted(ex.loading)) return loadsAvailable(ex.loading)
   return true
 }

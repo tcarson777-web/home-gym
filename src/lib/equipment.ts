@@ -6,6 +6,7 @@ export type Capability =
   | 'barbell'
   | 'plates'
   | 'kettlebell'
+  | 'landmine'
   | 'bench'
   | 'incline_bench'
   | 'rack'
@@ -22,6 +23,7 @@ export const KIND_INFO: Record<EquipmentKind, { label: string; emoji: string; pr
   fixed_dumbbells: { label: 'Fixed dumbbells', emoji: '🏋️', provides: ['dumbbell'] },
   barbell: { label: 'Barbell', emoji: '➖', provides: ['barbell'] },
   plates: { label: 'Weight plates', emoji: '⚫', provides: ['plates'] },
+  landmine: { label: 'Landmine attachment', emoji: '📐', provides: ['landmine'] },
   kettlebells: { label: 'Kettlebells', emoji: '🔔', provides: ['kettlebell'] },
   bench: { label: 'Bench', emoji: '🪑', provides: ['bench'] },
   rack: { label: 'Squat rack / stands', emoji: '🏗️', provides: ['rack'] },
@@ -83,12 +85,31 @@ export function barbellLoads(items: Equipment[]): number[] {
   return uniqSorted(out)
 }
 
-export type Loading = 'barbell' | 'dumbbell' | 'kettlebell' | 'bodyweight' | 'band'
+/** Landmine: weight = plates stacked on the one free end of the bar (0 = empty bar). */
+export function landmineLoads(items: Equipment[]): number[] {
+  if (!items.some((e) => e.kind === 'barbell') || !items.some((e) => e.kind === 'landmine')) return []
+  const plates = items.filter((e) => e.kind === 'plates').flatMap((e) => e.plates ?? [])
+  let sums = new Set<number>([0])
+  for (const p of plates) {
+    const next = new Set<number>()
+    for (const s of sums) for (let n = 0; n <= p.pairs * 2; n++) next.add(s + n * p.weight)
+    sums = next
+  }
+  return uniqSorted([...sums])
+}
+
+export type Loading = 'barbell' | 'dumbbell' | 'kettlebell' | 'landmine' | 'bodyweight' | 'band'
+
+/** Exercises where you choose and log a weight. */
+export function isWeighted(loading: Loading): boolean {
+  return loading === 'barbell' || loading === 'dumbbell' || loading === 'kettlebell' || loading === 'landmine'
+}
 
 export function loadsFor(loading: Loading, items: Equipment[]): number[] {
   if (loading === 'barbell') return barbellLoads(items)
   if (loading === 'dumbbell') return dumbbellLoads(items)
   if (loading === 'kettlebell') return kettlebellLoads(items)
+  if (loading === 'landmine') return landmineLoads(items)
   return []
 }
 
@@ -119,6 +140,8 @@ export function describeEquipment(e: Equipment): string {
       return `${e.barWeight ?? 45} lb bar`
     case 'plates':
       return e.plates?.length ? e.plates.map((p) => `${p.pairs}×2 @ ${p.weight}`).join(', ') : 'No plates entered'
+    case 'landmine':
+      return 'Fits your barbell; weight = plates on the free end'
     case 'bench':
       return e.incline ? 'Adjustable / incline' : 'Flat'
     case 'bands':

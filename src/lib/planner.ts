@@ -54,7 +54,7 @@ function schemeFor(ex: Exercise, main: boolean): { scheme: Scheme; rest: number 
     const sets = ex.id === 'bb_deadlift' ? 2 : 3
     return { scheme: { sets, reps: 5 }, rest: ex.lowerBody ? 180 : 150 }
   }
-  if (ex.loading === 'dumbbell' || ex.loading === 'kettlebell') {
+  if (ex.loading === 'dumbbell' || ex.loading === 'kettlebell' || ex.loading === 'landmine') {
     return main ? { scheme: { sets: 3, reps: 6, repsMax: 10 }, rest: 120 } : { scheme: { sets: 2, reps: 8, repsMax: 12 }, rest: 75 }
   }
   return main ? { scheme: { sets: 3, reps: 5, repsMax: 15 }, rest: 90 } : { scheme: { sets: 2, reps: 8, repsMax: 15 }, rest: 60 }
@@ -73,7 +73,7 @@ function liftItem(ex: Exercise, main: boolean, ctx: PlanContext, loads: number[]
     repsMax: rx.repsMax,
     targetWeight: rx.targetWeight,
     restSec: rest,
-    perSide: /per (arm|leg)/i.test(ex.cue),
+    perSide: /per (arm|leg|side)/i.test(ex.cue),
     isMainLift: main,
     cue: `${rx.note} ${ex.cue}`,
   }
@@ -119,10 +119,11 @@ function buildStrength(ctx: PlanContext): Plan {
   const accessoryPatterns: Pattern[] = ctx.variant === 'A' ? ['single_leg', 'core', 'carry'] : ['carry', 'core', 'single_leg']
   const accessories: PlanItem[] = []
   for (const p of accessoryPatterns) {
-    const ex = pick(p, [...used, ctx.variant === 'B' ? 'plank' : 'side_plank'])
+    // Vary core work between days: A gets the landmine rotation or plank, B something else.
+    const ex = pick(p, [...used, ...(ctx.variant === 'B' ? ['plank', 'lm_rotation'] : ['side_plank'])])
     if (!ex) continue
     used.push(ex.id)
-    if (ex.pattern === 'core' && ex.id !== 'hanging_knee_raise') {
+    if (ex.pattern === 'core' && ex.loading === 'bodyweight' && ex.id !== 'hanging_knee_raise') {
       accessories.push(timeItem(ex.id, ex.id === 'side_plank' ? 30 : 40, { sets: 3, restSec: 45, perSide: ex.id === 'side_plank' }))
     } else if (ex.pattern === 'carry') {
       const l = loads(ex.loading)
@@ -136,6 +137,11 @@ function buildStrength(ctx: PlanContext): Plan {
 
   // Fit the time budget: drop accessories, then trim sets.
   const budget = ctx.profile.sessionMinutes
+  // Over budget? Drop carries first, then single-leg work; keep core.
+  for (const pattern of ['carry', 'single_leg'] as Pattern[]) {
+    const idx = accessories.findIndex((it) => EXERCISE_BY_ID.get(it.exerciseId)?.pattern === pattern)
+    if (estimateMinutes(blocks) > budget && idx >= 0 && accessories.length > 1) accessories.splice(idx, 1)
+  }
   while (estimateMinutes(blocks) > budget && accessories.length > 1) accessories.pop()
   for (const it of [...accessories].reverse()) if (estimateMinutes(blocks) > budget && it.sets > 2) it.sets--
   const lastMain = mains[mains.length - 1]
