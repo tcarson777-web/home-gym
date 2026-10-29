@@ -113,3 +113,11 @@ textarea.input { min-height: 80px; resize: vertical; }
 
 .header-bar { position: sticky; top: 0; z-index: 5; background: var(--bg); padding: 12px 0; margin: -16px 0 0; }
 .notice { padding: 12px 14px; border-radius: 12px; background: rgba(245, 196, 81, 0.1); border: 1px solid rgba(245, 196, 81, 0.35); color: var(--warn); font-size: 0.92rem; }
+
+/* Plan preview */
+.preview-row { display: flex; align-items: baseline; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 0.95rem; }
+.preview-row:last-child { border-bottom: 0; }
+.preview-rx { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 0.9rem; }
+.segmented { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 4px; background: var(--bg); border-radius: 12px; border: 1px solid var(--border); }
+.segmented button { min-height: 44px; border-radius: 9px; border: 0; background: none; color: var(--muted); font-weight: 600; }
+.segmented button.on { background: var(--surface-2); color: var(--text); }

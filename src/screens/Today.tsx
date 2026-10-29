@@ -1,7 +1,8 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useState } from 'react'
+import PlanPreview from '../components/PlanPreview'
 import { db, DEFAULT_PROFILE } from '../lib/db'
-import { startSession, weekStatus } from '../lib/schedule'
+import { buildNextPlan, startSession, weekStatus } from '../lib/schedule'
 import type { Session, SessionType } from '../lib/types'
 
 interface Props {
@@ -20,14 +21,18 @@ export default function TodayScreen({ activeSession, onOpenWorkout, goTo }: Prop
 
   const target = (profile ?? DEFAULT_PROFILE).sessionsPerWeek
   const week = weekStatus(sessions, target)
-  const other: SessionType = week.suggested === 'strength' ? 'mobility' : 'strength'
   const overTarget = week.done.length >= target
   const isBonus = week.complete // the 4th (or later) session once the week's 3 incl. mobility are done
+  const [picked, setPicked] = useState<SessionType | null>(null)
+  const type = picked ?? week.suggested
+  // Re-builds automatically when equipment, profile or history change.
+  const plan = useLiveQuery(() => buildNextPlan(type), [type])
 
-  async function start(type: SessionType) {
+  async function start() {
+    if (!plan) return
     setBusy(true)
     try {
-      onOpenWorkout(await startSession(type, isBonus))
+      onOpenWorkout(await startSession(plan, isBonus))
     } finally {
       setBusy(false)
     }
@@ -81,41 +86,41 @@ export default function TodayScreen({ activeSession, onOpenWorkout, goTo }: Prop
             Resume workout
           </button>
         </div>
-      ) : overTarget ? (
-        <div className="card stack">
-          <h2>{week.complete ? 'Week complete ✅' : `${target} sessions done`}</h2>
-          <p className="muted">
-            {week.complete
-              ? 'Nice work. Rest up — or, if you are feeling good, add a bonus session.'
-              : "You haven't done a mobility session yet this week."}
-          </p>
-          {!week.complete && (
-            <button className="btn primary big" disabled={busy} onClick={() => start('mobility')}>
-              Start {LABEL.mobility}
-            </button>
-          )}
-          {week.complete && (
-            <>
-              <button className="btn primary big" disabled={busy} onClick={() => start('strength')}>
-                💪 Add bonus strength session
-              </button>
-              <button className="btn" disabled={busy} onClick={() => start('mobility')}>
-                Bonus mobility session instead
-              </button>
-            </>
-          )}
-        </div>
       ) : (
         <div className="card stack">
-          <span className="muted small">Next up</span>
-          <h2>{LABEL[week.suggested]}</h2>
-          <p className="muted small">~{(profile ?? DEFAULT_PROFILE).sessionMinutes} min, warm-up included.</p>
-          <button className="btn primary big" disabled={busy} onClick={() => start(week.suggested)}>
-            Start workout
-          </button>
-          <button className="btn ghost" disabled={busy} onClick={() => start(other)}>
-            Do {LABEL[other]} instead
-          </button>
+          {overTarget && (
+            <div>
+              <h2>{week.complete ? 'Week complete ✅' : `${target} sessions done`}</h2>
+              <p className="muted small">
+                {week.complete
+                  ? 'Nice work. Rest up — or, if you are feeling good, add a bonus session.'
+                  : "You haven't done a mobility session yet this week."}
+              </p>
+            </div>
+          )}
+          <div className="segmented">
+            {(['strength', 'mobility'] as const).map((t) => (
+              <button key={t} className={type === t ? 'on' : ''} onClick={() => setPicked(t)}>
+                {LABEL[t]}
+                {t === week.suggested && !week.complete ? ' ★' : ''}
+              </button>
+            ))}
+          </div>
+          {plan ? (
+            <>
+              <div>
+                <span className="muted small">{isBonus ? 'Bonus session' : type === week.suggested ? 'Recommended next' : 'Preview'}</span>
+                <h2>{plan.title}</h2>
+                <p className="muted small">~{plan.estimatedMinutes} min, warm-up included</p>
+              </div>
+              <button className="btn primary big" disabled={busy} onClick={start}>
+                {isBonus ? '💪 Start bonus session' : 'Start workout'}
+              </button>
+              <PlanPreview plan={plan} />
+            </>
+          ) : (
+            <p className="muted">Building your workout…</p>
+          )}
         </div>
       )}
     </div>

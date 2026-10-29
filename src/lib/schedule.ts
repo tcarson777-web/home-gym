@@ -1,7 +1,7 @@
 import { db, getProfile } from './db'
 import { buildRulesPlan } from './planner'
 import type { Performance } from './progression'
-import type { Session, SessionType, SetLog } from './types'
+import type { Plan, Session, SessionType, SetLog } from './types'
 
 /** Monday 00:00 local time of the week containing `d`. */
 export function weekStart(d = new Date()): Date {
@@ -62,7 +62,8 @@ export async function loadHistory(): Promise<Map<string, Performance[]>> {
   return out
 }
 
-export async function startSession(type: SessionType, bonus: boolean): Promise<number> {
+/** Build the plan for the next session without starting it (used for the preview). */
+export async function buildNextPlan(type: SessionType): Promise<Plan> {
   const [equipment, profile, history, done] = await Promise.all([
     db.equipment.toArray(),
     getProfile(),
@@ -71,6 +72,10 @@ export async function startSession(type: SessionType, bonus: boolean): Promise<n
   ])
   const lastStrength = done.filter((s) => s.type === 'strength').sort((a, b) => b.date.localeCompare(a.date))[0]
   const variant = lastStrength?.plan.variant === 'A' ? 'B' : 'A'
-  const plan = buildRulesPlan({ equipment, profile, type, variant, history })
-  return (await db.sessions.add({ date: new Date().toISOString(), type, status: 'in_progress', plan, bonus, checked: [] })) as number
+  return buildRulesPlan({ equipment, profile, type, variant, history })
+}
+
+/** Start a session from the plan the user previewed, so what they saw is what they get. */
+export async function startSession(plan: Plan, bonus: boolean): Promise<number> {
+  return (await db.sessions.add({ date: new Date().toISOString(), type: plan.type, status: 'in_progress', plan, bonus, checked: [] })) as number
 }
