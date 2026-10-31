@@ -6,6 +6,7 @@
 import { capabilities, loadsFor, type Loading } from './equipment'
 import { canDo, EXERCISES, EXERCISE_BY_ID, type Exercise, type Pattern } from './exercises'
 import { prescribe, type Performance, type Scheme } from './progression'
+import { sessionRange } from './db'
 import type { Equipment, Plan, PlanBlock, PlanItem, Profile, RecoverySignals, SessionType } from './types'
 
 export interface PlanContext {
@@ -135,8 +136,8 @@ function buildStrength(ctx: PlanContext): Plan {
 
   const blocks: PlanBlock[] = [strengthWarmup(available), { name: 'Main lifts', items: mains }, { name: 'Accessories', items: accessories }]
 
-  // Fit the time budget: drop accessories, then trim sets.
-  const budget = ctx.profile.sessionMinutes
+  // Fit the time range: never over the longest, topped up if under the shortest.
+  const { min, max: budget } = sessionRange(ctx.profile)
   // Over budget? Drop carries first, then single-leg work; keep core.
   for (const pattern of ['carry', 'single_leg'] as Pattern[]) {
     const idx = accessories.findIndex((it) => EXERCISE_BY_ID.get(it.exerciseId)?.pattern === pattern)
@@ -146,6 +147,25 @@ function buildStrength(ctx: PlanContext): Plan {
   for (const it of [...accessories].reverse()) if (estimateMinutes(blocks) > budget && it.sets > 2) it.sets--
   const lastMain = mains[mains.length - 1]
   if (lastMain && estimateMinutes(blocks) > budget && lastMain.sets > 2) lastMain.sets--
+
+  // Under the shortest time? Add accessory sets, then an extra core exercise.
+  for (const it of accessories) {
+    while (estimateMinutes(blocks) < min && it.sets < 3) {
+      it.sets++
+      if (estimateMinutes(blocks) > budget) {
+        it.sets--
+        break
+      }
+    }
+  }
+  if (estimateMinutes(blocks) < min) {
+    const extra = pick('core', [...used, 'hanging_knee_raise', 'lm_rotation'])
+    if (extra) {
+      const item = timeItem(extra.id, extra.id === 'side_plank' ? 30 : 40, { sets: 3, restSec: 45, perSide: extra.id === 'side_plank' })
+      accessories.push(item)
+      if (estimateMinutes(blocks) > budget) accessories.pop()
+    }
+  }
 
   return {
     title: `Strength ${ctx.variant}: ${mains.map((m) => m.name.replace(/^(Barbell|Dumbbell|Kettlebell) /, '')).join(' · ')}`,

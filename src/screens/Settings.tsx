@@ -89,14 +89,18 @@ export default function SettingsScreen() {
         <p className="muted small">The AI coach (next version) will use these. The built-in planner can't read free text, so it won't avoid movements yet — swap them yourself for now.</p>
         <div className="row">
           <label className="field grow">
-            Session length (min)
+            Shortest session (min)
             <input className="input" type="number" inputMode="numeric" value={p.sessionMinutes} onChange={(e) => set({ sessionMinutes: parseInt(e.target.value) || 45 })} />
           </label>
           <label className="field grow">
+            Longest session (min)
+            <input className="input" type="number" inputMode="numeric" value={p.sessionMaxMinutes ?? p.sessionMinutes + 15} onChange={(e) => set({ sessionMaxMinutes: parseInt(e.target.value) || 60 })} />
+          </label>
+        </div>
+        <label className="field">
             Sessions / week
             <input className="input" type="number" inputMode="numeric" value={p.sessionsPerWeek} onChange={(e) => set({ sessionsPerWeek: Math.max(1, parseInt(e.target.value) || 3) })} />
           </label>
-        </div>
         <button className="btn primary" onClick={save}>{saved ? 'Saved ✓' : 'Save'}</button>
       </div>
 

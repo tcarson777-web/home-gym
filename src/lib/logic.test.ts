@@ -5,7 +5,7 @@ import { canDo, EXERCISE_BY_ID } from './exercises'
 import { buildRulesPlan, type PlanContext } from './planner'
 import { prescribe, type Performance } from './progression'
 import type { Equipment, Profile, SetLog } from './types'
-import { DEFAULT_PROFILE } from './db'
+import { DEFAULT_PROFILE, sessionRange } from './db'
 import { weekStatus } from './schedule'
 
 const garage: Equipment[] = [
@@ -80,11 +80,28 @@ describe('planner', () => {
         const plan = buildRulesPlan(ctx(eq, variant))
         const caps = capabilities(eq)
         expect(plan.blocks[0].name).toBe('Warm-up')
-        expect(plan.estimatedMinutes).toBeLessThanOrEqual(45)
+        expect(plan.estimatedMinutes).toBeLessThanOrEqual(60)
         for (const b of plan.blocks)
           for (const it of b.items) expect(canDo(EXERCISE_BY_ID.get(it.exerciseId)!, caps, (l) => loadsFor(l, eq).length > 0)).toBe(true)
       }
     }
+  })
+  it('respects a strict 45-minute cap', () => {
+    const strict = { ...profile, sessionMinutes: 40, sessionMaxMinutes: 45 }
+    for (const variant of ['A', 'B'] as const)
+      expect(buildRulesPlan({ ...ctx(garage, variant), profile: strict }).estimatedMinutes).toBeLessThanOrEqual(45)
+  })
+  it('lands inside a 45–60 range with a full garage, keeping lunges and core', () => {
+    for (const variant of ['A', 'B'] as const) {
+      const plan = buildRulesPlan(ctx(garage, variant))
+      expect(plan.estimatedMinutes).toBeGreaterThanOrEqual(45)
+      expect(plan.estimatedMinutes).toBeLessThanOrEqual(60)
+    }
+    const a = buildRulesPlan(ctx(garage, 'A')).blocks[2].items.map((i) => i.exerciseId)
+    expect(a).toContain('db_reverse_lunge')
+  })
+  it('older saved profiles without a max default to min + 15', () => {
+    expect(sessionRange({ ...profile, sessionMinutes: 45, sessionMaxMinutes: undefined })).toEqual({ min: 45, max: 60 })
   })
   it('uses the barbell when there is a rack', () => {
     expect(buildRulesPlan(ctx(garage)).blocks[1].items[0].exerciseId).toBe('bb_back_squat')

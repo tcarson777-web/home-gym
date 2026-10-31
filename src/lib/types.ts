@@ -53,7 +53,8 @@ export interface Profile {
   bodyweight?: number
   injuries: string
   goals: string
-  sessionMinutes: number
+  sessionMinutes: number // shortest acceptable session
+  sessionMaxMinutes?: number // longest acceptable session (missing in older saved profiles)
   warmupMinutes: number
   sessionsPerWeek: number
 }

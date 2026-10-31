@@ -29,8 +29,15 @@ export const DEFAULT_PROFILE: Profile = {
   injuries: '',
   goals: 'Build strength',
   sessionMinutes: 45,
+  sessionMaxMinutes: 60,
   warmupMinutes: 10,
   sessionsPerWeek: 3,
+}
+
+/** Session length range in minutes. */
+export function sessionRange(p: Profile): { min: number; max: number } {
+  const min = p.sessionMinutes
+  return { min, max: Math.max(min, p.sessionMaxMinutes ?? min + 15) }
 }
 
 export async function getProfile(): Promise<Profile> {
