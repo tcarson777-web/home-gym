@@ -150,3 +150,21 @@ export function describeEquipment(e: Equipment): string {
       return e.notes ?? ''
   }
 }
+
+/** "10, 15, 20" or ranges like "5-50" (every 5 lb) or "5-25 by 2.5". */
+export function parseList(s: string): number[] {
+  const out: number[] = []
+  for (const part of s.split(/,|;|\n/)) {
+    const range = part.match(/(\d+(?:\.\d+)?)\s*(?:-|–|to)\s*(\d+(?:\.\d+)?)(?:\s*(?:by|step|x)\s*(\d+(?:\.\d+)?))?/i)
+    if (range) {
+      const [a, b, step] = [parseFloat(range[1]), parseFloat(range[2]), parseFloat(range[3] ?? '5')]
+      if (step > 0 && b >= a) for (let w = a; w <= b + 1e-9; w += step) out.push(Math.round(w * 100) / 100)
+      continue
+    }
+    for (const x of part.split(/\s+/)) {
+      const n = parseFloat(x)
+      if (Number.isFinite(n) && n > 0) out.push(n)
+    }
+  }
+  return [...new Set(out)].sort((a, b) => a - b)
+}

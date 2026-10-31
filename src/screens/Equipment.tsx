@@ -1,19 +1,11 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useState } from 'react'
 import { db, getProfile } from '../lib/db'
-import { describeEquipment, KIND_INFO } from '../lib/equipment'
+import { describeEquipment, KIND_INFO, parseList } from '../lib/equipment'
 import type { Equipment, EquipmentKind, PlatePair } from '../lib/types'
 import { equipmentUsage, type Usage } from '../lib/usage'
 
 const COMMON_PLATES = [45, 35, 25, 10, 5, 2.5]
-
-function parseList(s: string): number[] {
-  return s
-    .split(/[,\s]+/)
-    .map((x) => parseFloat(x))
-    .filter((x) => Number.isFinite(x) && x > 0)
-    .sort((a, b) => a - b)
-}
 
 function defaults(kind: EquipmentKind): Equipment {
   const base: Equipment = { kind, name: KIND_INFO[kind].label }
@@ -171,7 +163,12 @@ function EquipmentForm({ initial, onDone }: { initial: Equipment; onDone: () => 
       {(e.kind === 'fixed_dumbbells' || e.kind === 'kettlebells') && (
         <label className="field">
           Weights you own (lb), separated by commas{e.kind === 'fixed_dumbbells' ? ' — one entry per pair' : ''}
-          <input className="input" inputMode="decimal" placeholder="e.g. 10, 15, 20, 25" value={listText} onChange={(ev) => setListText(ev.target.value)} />
+          <input className="input" placeholder="e.g. 10, 15, 20, 25  or  5-50" value={listText} onChange={(ev) => setListText(ev.target.value)} />
+          {parseList(listText).length > 0 ? (
+            <span className="small">Will save: {parseList(listText).join(', ')} lb</span>
+          ) : (
+            <span className="small" style={{ color: 'var(--warn)' }}>No weights yet — workouts can't use these until you add some.</span>
+          )}
         </label>
       )}
 
