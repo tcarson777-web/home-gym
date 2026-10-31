@@ -1,7 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useState } from 'react'
 import PlanPreview from '../components/PlanPreview'
-import { db, DEFAULT_PROFILE } from '../lib/db'
+import { db, DEFAULT_PROFILE, sessionRange } from '../lib/db'
 import { buildNextPlan, startSession, weekStatus } from '../lib/schedule'
 import type { Session, SessionType } from '../lib/types'
 
@@ -111,7 +111,9 @@ export default function TodayScreen({ activeSession, onOpenWorkout, goTo }: Prop
               <div>
                 <span className="muted small">{isBonus ? 'Bonus session' : type === week.suggested ? 'Recommended next' : 'Preview'}</span>
                 <h2>{plan.title}</h2>
-                <p className="muted small">~{plan.estimatedMinutes} min, warm-up included</p>
+                <p className="muted small">
+                  ~{plan.estimatedMinutes} min, warm-up included · your range {sessionRange(profile ?? DEFAULT_PROFILE).min}–{sessionRange(profile ?? DEFAULT_PROFILE).max}
+                </p>
               </div>
               <button className="btn primary big" disabled={busy} onClick={start}>
                 {isBonus ? '💪 Start bonus session' : 'Start workout'}
