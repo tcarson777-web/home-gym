@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { barbellLoads, capabilities, dumbbellLoads, landmineLoads, loadsFor } from './equipment'
-import { equipmentUsage } from './usage'
+import { barbellLoads, capabilities, dumbbellLoads, landmineLoads, loadsFor, parseList } from './equipment'
+import { equipmentUsage, guessKind } from './usage'
 import { canDo, EXERCISE_BY_ID } from './exercises'
 import { buildRulesPlan, type PlanContext } from './planner'
 import { prescribe, type Performance } from './progression'
@@ -135,8 +135,46 @@ describe('landmine', () => {
     const u = equipmentUsage(items, DEFAULT_PROFILE)
     expect(u.get(99)!.inPlans).toContain('Landmine rotation')
     expect(u.get(99)!.alternatives).toContain('Half-kneeling landmine press')
-    expect(u.get(100)!.warning).toMatch(/doesn't know/)
+    expect(u.get(100)!.warning).toMatch(/ignores it/)
     const lonely = equipmentUsage([{ id: 1, kind: 'landmine', name: 'L' }], DEFAULT_PROFILE)
-    expect(lonely.get(1)!.warning).toMatch(/barbell/)
+    expect(lonely.get(1)!.warning).toMatch(/also needs Barbell\./)
+  })
+})
+
+describe('equipment diagnostics', () => {
+  const u = (items: Equipment[]) => equipmentUsage(items.map((e, i) => ({ ...e, id: i + 1 })), DEFAULT_PROFILE)
+
+  it('explains that a rack and bench need a barbell or dumbbells', () => {
+    const r = u([{ kind: 'rack', name: 'Rack' }, { kind: 'bench', name: 'Bench', incline: true }])
+    expect(r.get(1)!.warning).toMatch(/Barbell/)
+    expect(r.get(2)!.warning).toMatch(/Barbell/)
+    expect(r.get(2)!.warning).toMatch(/Dumbbells/)
+  })
+  it('points at a barbell saved as Other', () => {
+    const r = u([{ kind: 'rack', name: 'Rack' }, { kind: 'other', name: 'Olympic bar' }])
+    expect(r.get(1)!.warning).toMatch(/“Olympic bar” is saved as Other/)
+    expect(r.get(2)!.warning).toMatch(/Looks like a Barbell/)
+  })
+  it('warns when a barbell has no plates', () => {
+    const r = u([{ kind: 'barbell', name: 'Bar', barWeight: 45 }, { kind: 'rack', name: 'Rack' }])
+    expect(r.get(1)!.warning).toMatch(/No weight plates/)
+    expect(r.get(2)!.warning).toBeUndefined()
+  })
+  it('does not mistake a pull-up bar for a barbell', () => {
+    expect(guessKind({ kind: 'other', name: 'Doorway pull-up bar' })).toBe('pullup_bar')
+  })
+  it('flags dumbbells with no weights, and the bench that depends on them', () => {
+    const r = u([{ kind: 'fixed_dumbbells', name: 'Dumbbells', weights: [] }, { kind: 'bench', name: 'Bench' }])
+    expect(r.get(1)!.warning).toMatch(/No weights entered/)
+    expect(r.get(2)!.warning).toMatch(/no weights entered/)
+  })
+  it('is happy with a normal garage', () => {
+    const r = u(garage)
+    for (const usage of r.values()) expect(usage.warning).toBeUndefined()
+  })
+  it('parses weight lists and ranges', () => {
+    expect(parseList('10, 15, 20')).toEqual([10, 15, 20])
+    expect(parseList('5-25')).toEqual([5, 10, 15, 20, 25])
+    expect(parseList('5-10 by 2.5, 35')).toEqual([5, 7.5, 10, 35])
   })
 })
