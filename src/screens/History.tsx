@@ -54,6 +54,7 @@ export default function HistoryScreen() {
                 {logs.map((l) => (
                   <p key={l.id} className="small muted">
                     {l.exerciseName} · set {l.setIdx + 1}: {l.weight != null ? `${l.weight} lb × ` : ''}{l.reps}
+                    {l.assist && ` · ${l.assist === 'band' ? 'band' : `${l.assist} band`}`}
                     {l.rpe != null && ` · ${EFFORT_OPTIONS.find((e) => e.rpe === l.rpe)?.label}`}
                   </p>
                 ))}

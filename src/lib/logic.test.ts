@@ -195,3 +195,20 @@ describe('equipment diagnostics', () => {
     expect(parseList('5-10 by 2.5, 35')).toEqual([5, 7.5, 10, 35])
   })
 })
+
+describe('band-assisted pull-ups', () => {
+  const pullup = EXERCISE_BY_ID.get('pullup')!
+  const scheme = { sets: 3, reps: 5, repsMax: 15 }
+  const set = (reps: number, assist?: string): SetLog => ({ sessionId: 1, exerciseId: 'pullup', exerciseName: 'Pull-up', blockIdx: 1, itemIdx: 2, setIdx: 0, reps, assist, loggedAt: '' })
+
+  it('does not count band sets as full reps', () => {
+    const rx = prescribe(pullup, scheme, [perf([set(6), set(5), set(8, 'band')])], [])
+    expect(rx.note).toMatch(/2 sets without a band \(best 6\), 1 with/)
+  })
+  it('nudges toward no band when every set used one', () => {
+    expect(prescribe(pullup, scheme, [perf([set(8, 'medium'), set(8, 'medium')])], []).note).toMatch(/without it, or use a lighter band/)
+  })
+  it('unassisted history still progresses by reps', () => {
+    expect(prescribe(pullup, scheme, [perf([set(6), set(5), set(5)])], []).reps).toBe(6)
+  })
+})

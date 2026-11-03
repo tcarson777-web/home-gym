@@ -55,6 +55,20 @@ export function prescribe(ex: Exercise, scheme: Scheme, history: Performance[], 
 
   // Bodyweight / bands: progress reps only.
   if (!weighted || lastWeight == null) {
+    // Band-assisted sets don't count as full reps: progress on the unassisted ones.
+    const assisted = last.sets.filter((s) => s.assist)
+    const unassisted = last.sets.filter((s) => !s.assist)
+    if (assisted.length > 0) {
+      if (unassisted.length === 0) {
+        return { reps: scheme.reps, repsMax: scheme.repsMax, note: 'Every set used a band last time. Try your first set without it, or use a lighter band.' }
+      }
+      const best = Math.max(...unassisted.map((s) => s.reps ?? 0))
+      return {
+        reps: scheme.reps,
+        repsMax: scheme.repsMax,
+        note: `Last time: ${unassisted.length} set${unassisted.length > 1 ? 's' : ''} without a band (best ${best}), ${assisted.length} with. Goal: one more rep or one more set before reaching for the band.`,
+      }
+    }
     const minReps = Math.min(...last.sets.map((s) => s.reps ?? 0))
     const top = scheme.repsMax ?? scheme.reps
     if (minReps >= top) {

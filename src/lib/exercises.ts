@@ -21,6 +21,7 @@ export interface Exercise {
   loading: Loading
   requires: Capability[] // all of these must be available
   lowerBody?: boolean
+  assistable?: boolean // can be done with a band for help (log which sets used it)
   cue: string
 }
 
@@ -57,7 +58,7 @@ export const EXERCISES: Exercise[] = [
   { id: 'ring_row', name: 'Ring / suspension row', pattern: 'hpull', loading: 'bodyweight', requires: ['rings'], cue: 'Body straight, pull chest to hands. Walk feet forward to make it harder.' },
   { id: 'band_row', name: 'Band row', pattern: 'hpull', loading: 'band', requires: ['band'], cue: 'Anchor the band, squeeze shoulder blades together.' },
   // Vertical pull
-  { id: 'pullup', name: 'Pull-up', pattern: 'vpull', loading: 'bodyweight', requires: ['pullup_bar'], cue: 'Full hang to chin over bar. Use a band for help if needed.' },
+  { id: 'pullup', name: 'Pull-up', pattern: 'vpull', loading: 'bodyweight', requires: ['pullup_bar'], assistable: true, cue: 'Full hang to chin over bar. Use a band for help if needed.' },
   { id: 'band_pulldown', name: 'Band lat pulldown', pattern: 'vpull', loading: 'band', requires: ['band'], cue: 'Anchor high, pull elbows down to your ribs.' },
   // Single-leg accessories
   { id: 'db_reverse_lunge', name: 'Dumbbell reverse lunge', pattern: 'single_leg', loading: 'dumbbell', requires: ['dumbbell'], lowerBody: true, cue: 'Step back, both knees to 90°. Reps are per leg.' },

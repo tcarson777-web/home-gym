@@ -114,6 +114,11 @@ textarea.input { min-height: 80px; resize: vertical; }
 .header-bar { position: sticky; top: 0; z-index: 5; background: var(--bg); padding: 12px 0; margin: -16px 0 0; }
 .notice { padding: 12px 14px; border-radius: 12px; background: rgba(245, 196, 81, 0.1); border: 1px solid rgba(245, 196, 81, 0.35); color: var(--warn); font-size: 0.92rem; }
 
+/* Choice chips (e.g. band for pull-ups) */
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chips button { min-height: 48px; padding: 8px 16px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-2); font-weight: 600; }
+.chips button.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+
 /* Plan preview */
 .preview-row { display: flex; align-items: baseline; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 0.95rem; }
 .preview-row:last-child { border-bottom: 0; }

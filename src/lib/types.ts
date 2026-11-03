@@ -130,6 +130,7 @@ export interface SetLog {
   reps?: number
   seconds?: number
   rpe?: number
+  assist?: string // band used for help on this set, e.g. "band" or "medium"; undefined = none
   loggedAt: string
 }
 

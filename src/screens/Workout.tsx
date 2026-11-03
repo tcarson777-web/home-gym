@@ -162,10 +162,11 @@ export default function WorkoutScreen({ sessionId, onClose }: { sessionId: numbe
                     logged={setsByItem.get(k) ?? []}
                     expanded={isActive}
                     loads={loadsFor(EXERCISE_BY_ID.get(it.exerciseId)?.loading ?? 'bodyweight', equipment)}
-                    onLog={async (weight, reps, rpe) => {
+                    bandLevels={equipment.filter((e) => e.kind === 'bands').flatMap((e) => e.bandLevels ?? [])}
+                    onLog={async (weight, reps, rpe, assist) => {
                       unlockAudio()
                       const n = setsByItem.get(k)?.length ?? 0
-                      await db.sets.add({ sessionId, exerciseId: it.exerciseId, exerciseName: it.name, blockIdx: b, itemIdx: i, setIdx: n, weight, reps, rpe, loggedAt: new Date().toISOString() })
+                      await db.sets.add({ sessionId, exerciseId: it.exerciseId, exerciseName: it.name, blockIdx: b, itemIdx: i, setIdx: n, weight, reps, rpe, assist, loggedAt: new Date().toISOString() })
                       setRestEndsAt(Date.now() + it.restSec * 1000)
                       if (n + 1 >= it.sets) autoFollow()
                     }}
@@ -199,12 +200,13 @@ export default function WorkoutScreen({ sessionId, onClose }: { sessionId: numbe
   )
 }
 
-function RepsItem({ item, logged, expanded, loads, onLog, onUndo }: {
+function RepsItem({ item, logged, expanded, loads, bandLevels, onLog, onUndo }: {
   item: PlanItem
   logged: SetLog[]
   expanded: boolean
   loads: number[]
-  onLog: (weight: number | undefined, reps: number, rpe: number) => void
+  bandLevels: string[]
+  onLog: (weight: number | undefined, reps: number, rpe: number, assist: string | undefined) => void
   onUndo: (id: number) => void
 }) {
   const ex = EXERCISE_BY_ID.get(item.exerciseId)
@@ -214,7 +216,10 @@ function RepsItem({ item, logged, expanded, loads, onLog, onUndo }: {
   const firstGuess = ex?.loading === 'barbell' || ex?.loading === 'landmine' ? loads[0] : loads[Math.floor(loads.length * 0.2)]
   const startWeight = last?.weight ?? item.targetWeight ?? firstGuess
   const [weight, setWeight] = useState<number | undefined>(startWeight)
-  const [reps, setReps] = useState<number>(last?.reps ?? item.repsMax ?? item.reps ?? 8)
+  const [reps, setReps] = useState<number>(last?.reps ?? item.reps ?? item.repsMax ?? 8)
+  // Band help (pull-ups): starts at no band, then keeps whatever the last set used.
+  const [assist, setAssist] = useState<string | undefined>(last?.assist)
+  const assistOptions = bandLevels.length ? bandLevels : ['band']
   const prevLastId = useRef(last?.id)
   useEffect(() => {
     // Carry the last logged values forward to the next set.
@@ -222,6 +227,7 @@ function RepsItem({ item, logged, expanded, loads, onLog, onUndo }: {
       prevLastId.current = last.id
       setWeight(last.weight)
       setReps(last.reps ?? reps)
+      setAssist(last.assist)
     }
   }, [last, reps])
 
@@ -242,6 +248,7 @@ function RepsItem({ item, logged, expanded, loads, onLog, onUndo }: {
           <span className="check on">✓</span>
           <span className="grow">
             Set {st.setIdx + 1}: {st.weight != null ? `${st.weight} lb × ` : ''}{st.reps} reps
+            {st.assist && <span className="pill" style={{ marginLeft: 6 }}>{st.assist === 'band' ? 'band' : `${st.assist} band`}</span>}
             {st.rpe != null && <span className="muted"> · {EFFORT_OPTIONS.find((e) => e.rpe === st.rpe)?.label}</span>}
           </span>
           {expanded && <button className="btn ghost sm" onClick={() => onUndo(st.id!)}>Undo</button>}
@@ -252,10 +259,22 @@ function RepsItem({ item, logged, expanded, loads, onLog, onUndo }: {
           <p className="small"><b>Set {logged.length + 1} of {item.sets}</b></p>
           {weighted && <Stepper value={weight} unit="lb" onDown={() => step(-1)} onUp={() => step(1)} />}
           <Stepper value={reps} unit="reps" onDown={() => setReps(Math.max(0, reps - 1))} onUp={() => setReps(reps + 1)} />
+          {ex?.assistable && (
+            <div className="stack" style={{ gap: 6 }}>
+              <p className="muted small">Band for help?</p>
+              <div className="chips">
+                {[undefined, ...assistOptions].map((a) => (
+                  <button key={a ?? 'none'} className={assist === a ? 'on' : ''} onClick={() => setAssist(a)}>
+                    {a == null ? 'No band' : a === 'band' ? 'Band' : a}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <p className="muted small center">How did it feel? Tap to log the set.</p>
           <div className="effort">
             {EFFORT_OPTIONS.map((e) => (
-              <button key={e.label} onClick={() => onLog(weighted ? weight : undefined, reps, e.rpe)}>
+              <button key={e.label} onClick={() => onLog(weighted ? weight : undefined, reps, e.rpe, ex?.assistable ? assist : undefined)}>
                 {e.label}
                 <small>{e.hint}</small>
               </button>
