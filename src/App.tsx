@@ -1,6 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useState } from 'react'
 import { db } from './lib/db'
+import { applyUpdate, useUpdateReady } from './lib/update'
 import EquipmentScreen from './screens/Equipment'
 import HistoryScreen from './screens/History'
 import SettingsScreen from './screens/Settings'
@@ -20,6 +21,7 @@ export default function App() {
   const [tab, setTab] = useState<Tab>('today')
   const [openWorkout, setOpenWorkout] = useState<number | null>(null)
   const active = useLiveQuery(() => db.sessions.where('status').equals('in_progress').first())
+  const updateReady = useUpdateReady()
 
   if (openWorkout != null) {
     return (
@@ -32,6 +34,11 @@ export default function App() {
   return (
     <>
       <div className="app">
+        {updateReady && (
+          <button className="notice" style={{ width: '100%', textAlign: 'left', marginBottom: 12 }} onClick={applyUpdate}>
+            A new version of the app is ready. Tap to update{active ? ' (your workout in progress is saved)' : ''}.
+          </button>
+        )}
         {tab === 'today' && <TodayScreen activeSession={active} onOpenWorkout={setOpenWorkout} goTo={setTab} />}
         {tab === 'equipment' && <EquipmentScreen />}
         {tab === 'history' && <HistoryScreen />}

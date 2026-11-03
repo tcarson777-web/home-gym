@@ -26,7 +26,9 @@ export default function WorkoutScreen({ sessionId, onClose }: { sessionId: numbe
   const equipment = useLiveQuery(() => db.equipment.toArray(), [], [])
   // undefined = follow along automatically; null = everything collapsed
   const [activeKey, setActiveKey] = useState<string | null | undefined>(undefined)
-  const [restEndsAt, setRestEndsAt] = useState<number | null>(null)
+  // Saved on the session so the timer survives a reload or leaving the screen.
+  const restEndsAt = session?.restEndsAt ?? null
+  const setRestEndsAt = (endsAt: number | null) => db.sessions.update(sessionId, { restEndsAt: endsAt })
   const now = useNow(true)
 
   useEffect(() => {
@@ -44,6 +46,8 @@ export default function WorkoutScreen({ sessionId, onClose }: { sessionId: numbe
   useEffect(() => {
     if (restEndsAt && now >= restEndsAt && alarmed.current !== restEndsAt) {
       alarmed.current = restEndsAt
+      // Don't beep for a timer that ran out long ago (e.g. reopening the app later).
+      if (now - restEndsAt > 5000) return
       alertUser(2)
     }
   }, [now, restEndsAt])
@@ -108,10 +112,11 @@ export default function WorkoutScreen({ sessionId, onClose }: { sessionId: numbe
   }
 
   const elapsed = (now - new Date(s.date).getTime()) / 1000
-  const restLeft = restEndsAt ? (restEndsAt - now) / 1000 : null
+  // Hide a timer that ran out more than 5 minutes ago.
+  const restLeft = restEndsAt && now - restEndsAt < 300_000 ? (restEndsAt - now) / 1000 : null
 
   return (
-    <div className="stack" style={{ paddingBottom: restEndsAt ? 120 : 24 }}>
+    <div className="stack" style={{ paddingBottom: restLeft != null ? 120 : 24 }}>
       <div className="header-bar row between">
         <button className="btn ghost sm" onClick={onClose}>‹ Back</button>
         <span className="muted small">⏱ {fmt(elapsed)} · {doneItems}/{totalItems}</span>
@@ -184,7 +189,7 @@ export default function WorkoutScreen({ sessionId, onClose }: { sessionId: numbe
               <div className="time">{fmt(restLeft)}</div>
             </div>
             <div className="row">
-              <button className="btn" onClick={() => setRestEndsAt((t) => (t ?? Date.now()) + 30_000)}>+30s</button>
+              <button className="btn" onClick={() => setRestEndsAt(Math.max(restEndsAt ?? 0, Date.now()) + 30_000)}>+30s</button>
               <button className="btn primary" onClick={() => setRestEndsAt(null)}>Done</button>
             </div>
           </div>

@@ -104,6 +104,8 @@ export interface Session {
   plan: Plan
   bonus: boolean
   notes?: string
+  // Rest timer end (ms since epoch), saved so it survives reloads and leaving the screen
+  restEndsAt?: number | null
   // Items in time-based / checklist blocks that were ticked off: "blockIdx:itemIdx"
   checked: string[]
 }
