@@ -131,6 +131,7 @@ export interface SetLog {
   reps?: number
   seconds?: number
   rpe?: number
+  warmup?: boolean // a warm-up / ramp-up set: shown in the log, ignored by progression
   assist?: string // band used for help on this set, e.g. "band" or "medium"; undefined = none
   loggedAt: string
 }

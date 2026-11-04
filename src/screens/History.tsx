@@ -27,7 +27,7 @@ export default function HistoryScreen() {
         const mins = s.finishedAt ? Math.round((new Date(s.finishedAt).getTime() - new Date(s.date).getTime()) / 60000) : null
         // Best set per exercise (heaviest, then most reps)
         const best = new Map<string, SetLog>()
-        for (const l of logs) {
+        for (const l of logs.filter((x) => !x.warmup)) {
           const b = best.get(l.exerciseName)
           if (!b || (l.weight ?? 0) > (b.weight ?? 0) || ((l.weight ?? 0) === (b.weight ?? 0) && (l.reps ?? 0) > (b.reps ?? 0))) best.set(l.exerciseName, l)
         }
@@ -51,11 +51,11 @@ export default function HistoryScreen() {
             ))}
             {open === s.id && (
               <div className="stack">
-                {logs.map((l) => (
+                {logs.map((l, idx) => (
                   <p key={l.id} className="small muted">
-                    {l.exerciseName} · set {l.setIdx + 1}: {l.weight != null ? `${l.weight} lb × ` : ''}{l.reps}
+                    {l.exerciseName} · {l.warmup ? 'warm-up' : `set ${logs.slice(0, idx + 1).filter((x) => x.exerciseId === l.exerciseId && !x.warmup).length}`}: {l.weight != null ? `${l.weight} lb × ` : ''}{l.reps}
                     {l.assist && ` · ${l.assist === 'band' ? 'band' : `${l.assist} band`}`}
-                    {l.rpe != null && ` · ${EFFORT_OPTIONS.find((e) => e.rpe === l.rpe)?.label}`}
+                    {l.rpe != null && !l.warmup && ` · ${EFFORT_OPTIONS.find((e) => e.rpe === l.rpe)?.label}`}
                   </p>
                 ))}
                 <button

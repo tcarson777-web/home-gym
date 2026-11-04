@@ -3,7 +3,7 @@
 // The AI generator (v0.2) will start from this and adjust it; this also
 // serves as the offline fallback.
 
-import { capabilities, loadsFor, type Loading } from './equipment'
+import { capabilities, loadsFor, roundDown, type Loading } from './equipment'
 import { canDo, EXERCISES, EXERCISE_BY_ID, type Exercise, type Pattern } from './exercises'
 import { prescribe, type Performance, type Scheme } from './progression'
 import { sessionRange } from './db'
@@ -16,10 +16,15 @@ export interface PlanContext {
   variant: 'A' | 'B'
   history: Map<string, Performance[]> // exerciseId -> performances, newest first
   recovery?: RecoverySignals | null // not used by the rules yet; reserved for Fitbit
+  now?: number // for tests; defaults to the current time
 }
 
 // Carries are pointless with light weights: require at least this per hand.
 const MIN_CARRY_LB = 35
+// Dumbbell / kettlebell lifts need weights heavy enough to matter (heaviest you own).
+const MIN_FREE_WEIGHT_LB = { lower: 25, upper: 10 }
+
+export type Role = 'main' | 'secondary' | 'accessory'
 
 function makePicker(equipment: Equipment[], excluded: string[] = []) {
   const caps = capabilities(equipment)
@@ -31,7 +36,10 @@ function makePicker(equipment: Equipment[], excluded: string[] = []) {
   const available = (ex: Exercise) =>
     !excluded.includes(ex.id) &&
     canDo(ex, caps, (l) => loads(l).length > 0) &&
-    (ex.pattern !== 'carry' || Math.max(0, ...loads(ex.loading)) >= MIN_CARRY_LB)
+    (ex.pattern !== 'carry' || Math.max(0, ...loads(ex.loading)) >= MIN_CARRY_LB) &&
+    (ex.pattern === 'carry' ||
+      (ex.loading !== 'dumbbell' && ex.loading !== 'kettlebell') ||
+      Math.max(0, ...loads(ex.loading)) >= (ex.lowerBody ? MIN_FREE_WEIGHT_LB.lower : MIN_FREE_WEIGHT_LB.upper))
   const pick = (pattern: Pattern, exclude: string[] = []) =>
     EXERCISES.find((e) => e.pattern === pattern && available(e) && !exclude.includes(e.id))
   return { pick, loads, available }
@@ -56,22 +64,23 @@ export function estimateMinutes(blocks: PlanBlock[]): number {
   return Math.round(sec / 60)
 }
 
-function schemeFor(ex: Exercise, main: boolean): { scheme: Scheme; rest: number } {
-  if (ex.loading === 'barbell' && !main) return { scheme: { sets: 2, reps: 8, repsMax: 12 }, rest: 75 }
-  if (ex.loading === 'barbell') {
+// Sets, reps and rest by role. Main = heavy strength work; secondary = the day's lighter
+// second leg lift; accessory = arms, single-leg, etc.
+function schemeFor(ex: Exercise, role: Role): { scheme: Scheme; rest: number } {
+  if (ex.loading === 'barbell' && role === 'main') {
     const sets = ex.id === 'bb_deadlift' ? 2 : 3
     return { scheme: { sets, reps: 5 }, rest: ex.lowerBody ? 180 : 150 }
   }
-  if (ex.loading === 'dumbbell' || ex.loading === 'kettlebell' || ex.loading === 'landmine') {
-    return main ? { scheme: { sets: 3, reps: 6, repsMax: 10 }, rest: 120 } : { scheme: { sets: 2, reps: 8, repsMax: 12 }, rest: 75 }
-  }
-  return main ? { scheme: { sets: 3, reps: 5, repsMax: 15 }, rest: 90 } : { scheme: { sets: 2, reps: 8, repsMax: 15 }, rest: 60 }
+  const bodyweight = ex.loading === 'bodyweight' || ex.loading === 'band'
+  if (role === 'main') return bodyweight ? { scheme: { sets: 3, reps: 5, repsMax: 15 }, rest: 90 } : { scheme: { sets: 3, reps: 6, repsMax: 10 }, rest: 120 }
+  if (role === 'secondary') return bodyweight ? { scheme: { sets: 2, reps: 8, repsMax: 15 }, rest: 90 } : { scheme: { sets: 2, reps: 6, repsMax: 10 }, rest: 120 }
+  return bodyweight ? { scheme: { sets: 2, reps: 8, repsMax: 15 }, rest: 60 } : { scheme: { sets: 2, reps: 8, repsMax: 12 }, rest: 75 }
 }
 
-function liftItem(ex: Exercise, main: boolean, ctx: PlanContext, loads: number[], extraSets = 0): PlanItem {
-  const { scheme, rest } = schemeFor(ex, main)
+function liftItem(ex: Exercise, role: Role, ctx: PlanContext, loads: number[], extraSets = 0): PlanItem {
+  const { scheme, rest } = schemeFor(ex, role)
   scheme.sets += extraSets
-  const rx = prescribe(ex, scheme, ctx.history.get(ex.id) ?? [], loads)
+  const rx = prescribe(ex, scheme, ctx.history.get(ex.id) ?? [], loads, ctx.now)
   return {
     exerciseId: ex.id,
     name: ex.name,
@@ -82,9 +91,22 @@ function liftItem(ex: Exercise, main: boolean, ctx: PlanContext, loads: number[]
     targetWeight: rx.targetWeight,
     restSec: rest,
     perSide: /per (arm|leg|side)/i.test(ex.cue),
-    isMainLift: main,
+    isMainLift: role === 'main',
     cue: `${rx.note} ${ex.cue}`,
   }
+}
+
+/** Ramp-up sets in real weights, e.g. "Warm-up (don't log, or mark as Warm-up): 45 × 8 · 95 × 5 · 125 × 3". */
+function warmupCue(it: PlanItem, loads: number[], first: boolean): string {
+  const t = it.targetWeight
+  if (t == null || loads.length === 0) {
+    return first ? 'Warm up first: empty bar × 8, then 2–3 jumps up to your working weight. ' : 'Warm up with 1–2 lighter sets first. '
+  }
+  const steps = (first ? [[0, 8], [0.6, 5], [0.8, 3]] : [[0.6, 5], [0.8, 2]]).map(([pct, reps]) => [pct === 0 ? loads[0] : (roundDown(t * pct, loads) ?? loads[0]), reps])
+  const seen = new Set<number>()
+  const sets = steps.filter(([w]) => w < t && !seen.has(w) && seen.add(w))
+  if (sets.length === 0) return ''
+  return `Warm-up sets (mark them "Warm-up" when logging): ${sets.map(([w, r]) => `${w} × ${r}`).join(' · ')}. `
 }
 
 function strengthWarmup(available: (e: Exercise) => boolean): PlanBlock {
@@ -120,9 +142,22 @@ function buildStrength(ctx: PlanContext): Plan {
     }
     used.push(ex.id)
     const extra = i === 0 && (ctx.profile.experience === '1to3' || ctx.profile.experience === 'over3') ? 1 : 0
-    mains.push(liftItem(ex, true, ctx, loads(ex.loading), extra))
+    mains.push(liftItem(ex, 'main', ctx, loads(ex.loading), extra))
   })
-  if (mains[0]) mains[0].cue = `Warm-up sets first: light × 8, ~60% × 5, ~80% × 3. ${mains[0].cue}`
+
+  // Train a squat AND a hinge every strength day, so each leg pattern gets 2 sessions a week:
+  // day A adds a lighter hinge (RDL), day B a lighter squat. Goes third, before the pull.
+  const secondary = ctx.variant === 'A' ? pick('hinge', [...used, 'bb_deadlift']) : pick('squat', [...used, 'bb_back_squat'])
+  if (secondary) {
+    used.push(secondary.id)
+    mains.splice(Math.min(2, mains.length), 0, liftItem(secondary, 'secondary', ctx, loads(secondary.loading)))
+  }
+
+  // Ramp-up sets in real weights for barbell lifts.
+  mains.forEach((m, i) => {
+    const ex = EXERCISE_BY_ID.get(m.exerciseId)!
+    if (ex.loading === 'barbell' && m.isMainLift) m.cue = warmupCue(m, loads('barbell'), i === 0) + m.cue
+  })
 
   // Accessories, in the order you do them: legs, arms (biceps + triceps), core, carry.
   const accessoryPatterns: Pattern[] = ['single_leg', 'biceps', 'triceps', 'core', 'carry']
@@ -141,7 +176,7 @@ function buildStrength(ctx: PlanContext): Plan {
       const l = loads(ex.loading)
       accessories.push(timeItem(ex.id, 40, { sets: 3, restSec: 60, targetWeight: l[Math.floor(l.length * 0.6)] }))
     } else {
-      accessories.push(liftItem(ex, false, ctx, loads(ex.loading)))
+      accessories.push(liftItem(ex, 'accessory', ctx, loads(ex.loading)))
     }
   }
 

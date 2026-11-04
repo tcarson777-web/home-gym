@@ -3,10 +3,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import Stepper from '../components/Stepper'
 import { alertUser, keepScreenOn, unlockAudio } from '../lib/alerts'
 import { db } from '../lib/db'
-import { isWeighted, loadsFor, nextDown, nextUp } from '../lib/equipment'
+import { describePlates, isWeighted, loadsFor, nextDown, nextUp } from '../lib/equipment'
 import { EXERCISE_BY_ID } from '../lib/exercises'
 import { fmtTime as fmt, repsLabel } from '../lib/format'
-import { EFFORT_OPTIONS, type PlanItem, type Session, type SetLog } from '../lib/types'
+import { EFFORT_OPTIONS, type Equipment, type PlanItem, type Session, type SetLog } from '../lib/types'
 
 const key = (b: number, i: number) => `${b}:${i}`
 
@@ -68,7 +68,7 @@ export default function WorkoutScreen({ sessionId, onClose }: { sessionId: numbe
 
   const isComplete = (b: number, i: number, it: PlanItem) =>
     it.kind === 'reps'
-      ? (setsByItem.get(key(b, i))?.length ?? 0) >= it.sets
+      ? (setsByItem.get(key(b, i)) ?? []).filter((x) => !x.warmup).length >= it.sets
       : Array.from({ length: it.sets }, (_, n) => s.checked.includes(`${key(b, i)}:${n}`)).every(Boolean)
 
   const order: [number, number][] = s.plan.blocks.flatMap((bl, b) => bl.items.map((_, i) => [b, i] as [number, number]))
@@ -163,12 +163,15 @@ export default function WorkoutScreen({ sessionId, onClose }: { sessionId: numbe
                     expanded={isActive}
                     loads={loadsFor(EXERCISE_BY_ID.get(it.exerciseId)?.loading ?? 'bodyweight', equipment)}
                     bandLevels={equipment.filter((e) => e.kind === 'bands').flatMap((e) => e.bandLevels ?? [])}
-                    onLog={async (weight, reps, rpe, assist) => {
+                    equipment={equipment}
+                    onLog={async (weight, reps, rpe, assist, warmup) => {
                       unlockAudio()
                       const n = setsByItem.get(k)?.length ?? 0
-                      await db.sets.add({ sessionId, exerciseId: it.exerciseId, exerciseName: it.name, blockIdx: b, itemIdx: i, setIdx: n, weight, reps, rpe, assist, loggedAt: new Date().toISOString() })
-                      setRestEndsAt(Date.now() + it.restSec * 1000)
-                      if (n + 1 >= it.sets) autoFollow()
+                      await db.sets.add({ sessionId, exerciseId: it.exerciseId, exerciseName: it.name, blockIdx: b, itemIdx: i, setIdx: n, weight, reps, rpe, assist, warmup: warmup || undefined, loggedAt: new Date().toISOString() })
+                      // Warm-up sets get a short rest; working sets the planned one.
+                      setRestEndsAt(Date.now() + (warmup ? Math.min(60, it.restSec) : it.restSec) * 1000)
+                      const working = (setsByItem.get(k) ?? []).filter((x) => !x.warmup).length + (warmup ? 0 : 1)
+                      if (!warmup && working === it.sets) autoFollow()
                     }}
                     onUndo={(id) => db.sets.delete(id)}
                   />
@@ -200,13 +203,14 @@ export default function WorkoutScreen({ sessionId, onClose }: { sessionId: numbe
   )
 }
 
-function RepsItem({ item, logged, expanded, loads, bandLevels, onLog, onUndo }: {
+function RepsItem({ item, logged, expanded, loads, bandLevels, equipment, onLog, onUndo }: {
   item: PlanItem
   logged: SetLog[]
   expanded: boolean
   loads: number[]
   bandLevels: string[]
-  onLog: (weight: number | undefined, reps: number, rpe: number, assist: string | undefined) => void
+  equipment: Equipment[]
+  onLog: (weight: number | undefined, reps: number, rpe: number, assist: string | undefined, warmup: boolean) => void
   onUndo: (id: number) => void
 }) {
   const ex = EXERCISE_BY_ID.get(item.exerciseId)
@@ -220,6 +224,9 @@ function RepsItem({ item, logged, expanded, loads, bandLevels, onLog, onUndo }: 
   // Band help (pull-ups): starts at no band, then keeps whatever the last set used.
   const [assist, setAssist] = useState<string | undefined>(last?.assist)
   const assistOptions = bandLevels.length ? bandLevels : ['band']
+  // Warm-up sets are logged but don't count toward the plan or progression.
+  const [warmup, setWarmup] = useState<boolean>(!!last?.warmup)
+  const [extra, setExtra] = useState(false)
   const prevLastId = useRef(last?.id)
   useEffect(() => {
     // Carry the last logged values forward to the next set.
@@ -228,10 +235,14 @@ function RepsItem({ item, logged, expanded, loads, bandLevels, onLog, onUndo }: 
       setWeight(last.weight)
       setReps(last.reps ?? reps)
       setAssist(last.assist)
+      setWarmup(!!last.warmup)
+      setExtra(false)
     }
   }, [last, reps])
 
-  const remaining = item.sets - logged.length
+  const workingDone = logged.filter((st) => !st.warmup).length
+  const remaining = item.sets - workingDone
+  const showPanel = expanded && (remaining > 0 || extra)
   const step = (dir: 1 | -1) => {
     if (loads.length) {
       const cur = weight ?? loads[0]
@@ -240,24 +251,37 @@ function RepsItem({ item, logged, expanded, loads, bandLevels, onLog, onUndo }: 
       setWeight(Math.max(0, (weight ?? 0) + dir * 5))
     }
   }
+  const plates = weight != null && (ex?.loading === 'barbell' || ex?.loading === 'landmine') ? describePlates(weight, ex.loading, equipment) : ''
+  let workingNo = 0
 
   return (
     <div className="stack">
       {logged.map((st) => (
-        <div key={st.id} className="set-row logged">
-          <span className="check on">✓</span>
+        <div key={st.id} className={`set-row ${st.warmup ? '' : 'logged'}`}>
+          <span className={`check ${st.warmup ? '' : 'on'}`}>{st.warmup ? '' : '✓'}</span>
           <span className="grow">
-            Set {st.setIdx + 1}: {st.weight != null ? `${st.weight} lb × ` : ''}{st.reps} reps
+            {st.warmup ? <span className="muted">Warm-up: </span> : `Set ${++workingNo}: `}
+            {st.weight != null ? `${st.weight} lb × ` : ''}{st.reps} reps
             {st.assist && <span className="pill" style={{ marginLeft: 6 }}>{st.assist === 'band' ? 'band' : `${st.assist} band`}</span>}
-            {st.rpe != null && <span className="muted"> · {EFFORT_OPTIONS.find((e) => e.rpe === st.rpe)?.label}</span>}
+            {st.rpe != null && !st.warmup && <span className="muted"> · {EFFORT_OPTIONS.find((e) => e.rpe === st.rpe)?.label}</span>}
           </span>
           {expanded && <button className="btn ghost sm" onClick={() => onUndo(st.id!)}>Undo</button>}
         </div>
       ))}
-      {expanded && remaining > 0 && (
+      {showPanel && (
         <div className="stack">
-          <p className="small"><b>Set {logged.length + 1} of {item.sets}</b></p>
+          <p className="small">
+            <b>{warmup ? 'Warm-up set' : remaining > 0 ? `Set ${workingDone + 1} of ${item.sets}` : `Extra set ${workingDone + 1}`}</b>
+            {item.targetWeight != null && !warmup && <span className="muted"> · target {item.targetWeight} lb</span>}
+          </p>
+          {weighted && (
+            <div className="chips">
+              <button className={warmup ? '' : 'on'} onClick={() => { setWarmup(false); if (item.targetWeight != null) setWeight(item.targetWeight) }}>Working set</button>
+              <button className={warmup ? 'on' : ''} onClick={() => setWarmup(true)}>Warm-up set</button>
+            </div>
+          )}
           {weighted && <Stepper value={weight} unit="lb" onDown={() => step(-1)} onUp={() => step(1)} />}
+          {plates && <p className="muted small center" style={{ marginTop: -6 }}>{plates}</p>}
           <Stepper value={reps} unit="reps" onDown={() => setReps(Math.max(0, reps - 1))} onUp={() => setReps(reps + 1)} />
           {ex?.assistable && (
             <div className="stack" style={{ gap: 6 }}>
@@ -274,13 +298,16 @@ function RepsItem({ item, logged, expanded, loads, bandLevels, onLog, onUndo }: 
           <p className="muted small center">How did it feel? Tap to log the set.</p>
           <div className="effort">
             {EFFORT_OPTIONS.map((e) => (
-              <button key={e.label} onClick={() => onLog(weighted ? weight : undefined, reps, e.rpe, ex?.assistable ? assist : undefined)}>
+              <button key={e.label} onClick={() => onLog(weighted ? weight : undefined, reps, e.rpe, ex?.assistable ? assist : undefined, weighted && warmup)}>
                 {e.label}
                 <small>{e.hint}</small>
               </button>
             ))}
           </div>
         </div>
+      )}
+      {expanded && remaining <= 0 && !extra && (
+        <button className="btn ghost sm" onClick={() => setExtra(true)}>+ Add another set</button>
       )}
     </div>
   )

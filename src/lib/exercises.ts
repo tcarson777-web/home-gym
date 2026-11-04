@@ -37,6 +37,7 @@ export const EXERCISES: Exercise[] = [
   { id: 'bw_split_squat', name: 'Split squat', pattern: 'squat', loading: 'bodyweight', requires: [], lowerBody: true, cue: 'Long stance, back knee lowers straight down.' },
   // Hinge
   { id: 'bb_deadlift', name: 'Barbell deadlift', pattern: 'hinge', loading: 'barbell', requires: ['barbell', 'plates'], lowerBody: true, cue: 'Bar over mid-foot, flat back, push the floor away.' },
+  { id: 'bb_rdl', name: 'Barbell Romanian deadlift', pattern: 'hinge', loading: 'barbell', requires: ['barbell'], lowerBody: true, cue: 'Start standing (take it from the rack), soft knees, push your hips back until you feel your hamstrings, bar close to your legs.' },
   { id: 'lm_rdl', name: 'Landmine Romanian deadlift', pattern: 'hinge', loading: 'landmine', requires: ['barbell', 'landmine'], lowerBody: true, cue: 'Straddle the bar, both hands on the end, hips back with a flat back. Weight = plates on the end.' },
   { id: 'db_rdl', name: 'Dumbbell Romanian deadlift', pattern: 'hinge', loading: 'dumbbell', requires: ['dumbbell'], lowerBody: true, cue: 'Soft knees, push hips back, bells slide down your thighs.' },
   { id: 'kb_rdl', name: 'Kettlebell Romanian deadlift', pattern: 'hinge', loading: 'kettlebell', requires: ['kettlebell'], lowerBody: true, cue: 'Hips back, flat back, stand tall and squeeze glutes.' },

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { barbellLoads, capabilities, dumbbellLoads, landmineLoads, loadsFor, parseList } from './equipment'
+import { barbellLoads, capabilities, describePlates, dumbbellLoads, landmineLoads, loadsFor, parseList, platesFor } from './equipment'
 import { equipmentUsage, guessKind } from './usage'
 import { canDo, EXERCISE_BY_ID } from './exercises'
 import { buildRulesPlan, type PlanContext } from './planner'
@@ -18,7 +18,8 @@ const garage: Equipment[] = [
 
 const sets = (weight: number, reps: number[], rpe = 8): SetLog[] =>
   reps.map((r, i) => ({ sessionId: 1, exerciseId: 'x', exerciseName: 'x', blockIdx: 1, itemIdx: 0, setIdx: i, weight, reps: r, rpe, loggedAt: '' }))
-const perf = (s: SetLog[], date = '2026-10-01'): Performance => ({ sessionId: 1, date, sets: s })
+const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString()
+const perf = (s: SetLog[], date = daysAgo(3)): Performance => ({ sessionId: 1, date, sets: s })
 
 describe('equipment loads', () => {
   it('builds barbell totals from plate pairs', () => {
@@ -46,7 +47,7 @@ describe('progression', () => {
     expect(prescribe(squat, { sets: 3, reps: 5 }, [perf(sets(135, [5, 4, 3]))], loads).targetWeight).toBe(135)
   })
   it('deloads after two misses at the same weight', () => {
-    const h = [perf(sets(135, [5, 4, 3]), '2026-10-03'), perf(sets(135, [5, 5, 4]), '2026-10-01')]
+    const h = [perf(sets(135, [5, 4, 3]), daysAgo(2)), perf(sets(135, [5, 5, 4]), daysAgo(5))]
     const full = barbellLoads([...garage, { kind: 'plates', name: 'More', plates: [{ weight: 25, pairs: 1 }, { weight: 10, pairs: 1 }] }])
     expect(prescribe(squat, { sets: 3, reps: 5 }, h, full).targetWeight).toBe(120)
   })
@@ -54,7 +55,7 @@ describe('progression', () => {
     // Sparse plates: 170 lb is reachable but the next step up is 225.
     const up = prescribe(squat, { sets: 3, reps: 5 }, [perf(sets(170, [5, 5, 5]))], loads)
     expect(up.targetWeight).toBe(170)
-    const h = [perf(sets(135, [5, 4, 3]), '2026-10-03'), perf(sets(135, [5, 5, 4]), '2026-10-01')]
+    const h = [perf(sets(135, [5, 4, 3]), daysAgo(2)), perf(sets(135, [5, 5, 4]), daysAgo(5))]
     const down = prescribe(squat, { sets: 3, reps: 5 }, h, loads)
     expect(down.targetWeight).toBe(135)
     expect(down.reps).toBe(3)
@@ -249,7 +250,8 @@ describe('arms, carries and removed exercises', () => {
   it('skips farmer carries with a 10 lb kettlebell', () => {
     for (const v of ['A', 'B'] as const) expect(ids(ctx(myGarage, v))).not.toContain('kb_farmer_carry')
     const heavy = [...myGarage, { kind: 'kettlebells', name: 'KB2', weights: [35, 53] } as Equipment]
-    expect(ids(ctx(heavy, 'B'))).toContain('kb_farmer_carry')
+    const roomy = { ...DEFAULT_PROFILE, sessionMinutes: 60, sessionMaxMinutes: 90 }
+    expect(ids(ctx(heavy, 'B', roomy))).toContain('kb_farmer_carry')
   })
   it('removed exercises are never suggested, and something else takes their place', () => {
     const profile = { ...DEFAULT_PROFILE, excludedExercises: ['bb_curl', 'wu_inchworm', 'bb_back_squat'] }
@@ -259,5 +261,72 @@ describe('arms, carries and removed exercises', () => {
     expect(a).not.toContain('bb_back_squat')
     expect(a).toContain('band_curl')
     expect(a).toContain('lm_squat')
+  })
+})
+
+describe('logging accuracy', () => {
+  const dl = EXERCISE_BY_ID.get('bb_deadlift')!
+  const loads = barbellLoads(garage)
+  const s = (weight: number, reps: number, rpe: number, warmup = false): SetLog =>
+    ({ sessionId: 1, exerciseId: 'bb_deadlift', exerciseName: 'DL', blockIdx: 1, itemIdx: 0, setIdx: 0, weight, reps, rpe, warmup, loggedAt: '' })
+
+  it('your deadlift day: 10 reps at 155 when 5 were planned jumps to ~170, not +10', () => {
+    const rx = prescribe(dl, { sets: 3, reps: 5 }, [perf([s(135, 10, 7.5), s(155, 10, 9), s(155, 10, 9)])], loads)
+    expect(rx.targetWeight).toBe(170)
+    expect(rx.note).toMatch(/too light/)
+  })
+  it('warm-up sets are ignored when judging the session', () => {
+    // 3 working sets of 5 at 135 plus two warm-ups: a clean session, so +10
+    const rx = prescribe(dl, { sets: 3, reps: 5 }, [perf([s(45, 8, 6, true), s(95, 5, 6, true), s(135, 5, 8), s(135, 5, 8), s(135, 5, 8)])], loads)
+    expect(rx.targetWeight).toBe(145)
+  })
+  it('a session of only warm-up sets is skipped', () => {
+    const h = [perf([s(45, 8, 6, true)], daysAgo(1)), perf([s(135, 5, 8), s(135, 5, 8), s(135, 5, 8)], daysAgo(4))]
+    expect(prescribe(dl, { sets: 3, reps: 5 }, h, loads).targetWeight).toBe(145)
+  })
+  it('extra sets beyond the plan still count', () => {
+    expect(prescribe(dl, { sets: 3, reps: 5 }, [perf([s(135, 5, 8), s(135, 5, 8), s(135, 5, 8), s(135, 5, 9)])], loads).targetWeight).toBe(145)
+  })
+  it('after more than 3 weeks off, eases back in at ~90%', () => {
+    const rx = prescribe(dl, { sets: 3, reps: 5 }, [perf([s(170, 5, 8), s(170, 5, 8), s(170, 5, 8)], daysAgo(30))], loads)
+    expect(rx.targetWeight).toBe(150)
+    expect(rx.note).toMatch(/weeks since/)
+  })
+})
+
+describe('twice-a-week legs', () => {
+  const ctx = (variant: 'A' | 'B', equipment: Equipment[] = garage): PlanContext => ({ equipment, profile: DEFAULT_PROFILE, type: 'strength', variant, history: new Map() })
+  const mainIds = (v: 'A' | 'B', eq?: Equipment[]) => buildRulesPlan(ctx(v, eq)).blocks[1].items.map((i) => i.exerciseId)
+
+  it('day A has squat + a lighter hinge; day B has deadlift + a lighter squat', () => {
+    expect(mainIds('A')).toEqual(['bb_back_squat', 'bb_bench', 'bb_rdl', 'bb_row'])
+    expect(mainIds('B')[0]).toBe('bb_deadlift')
+    expect(EXERCISE_BY_ID.get(mainIds('B')[2])!.pattern).toBe('squat')
+  })
+  it('secondary lifts use 2 × 6–10, and both days stay within 60 min', () => {
+    const rdl = buildRulesPlan(ctx('A')).blocks[1].items.find((i) => i.exerciseId === 'bb_rdl')!
+    expect([rdl.sets, rdl.reps, rdl.repsMax]).toEqual([2, 6, 10])
+    for (const v of ['A', 'B'] as const) expect(buildRulesPlan(ctx(v)).estimatedMinutes).toBeLessThanOrEqual(60)
+  })
+  it('a 10 lb kettlebell is too light for goblet squats; falls back to split squats', () => {
+    const eq: Equipment[] = [{ kind: 'pullup_bar', name: 'Bar' }, { kind: 'kettlebells', name: 'KB', weights: [10] }]
+    expect(mainIds('A', eq)[0]).toBe('bw_split_squat')
+  })
+})
+
+describe('plate calculator & warm-up weights', () => {
+  it('loads each side, biggest plates first', () => {
+    expect(platesFor(155, 'barbell', garage)).toEqual([45, 10])
+    expect(platesFor(160, 'barbell', garage)).toEqual([45, 10, 2.5])
+    expect(platesFor(45, 'barbell', garage)).toEqual([])
+    expect(platesFor(47.5, 'barbell', garage)).toBeNull()
+    expect(describePlates(225, 'barbell', garage)).toBe('Each side: 45 + 45')
+    expect(describePlates(25, 'landmine', [...garage, { kind: 'landmine', name: 'L' }])).toBe('On the end: 10 + 10 + 5')
+  })
+  it('first lift shows real ramp-up weights once there is a target', () => {
+    const history = new Map([['bb_back_squat', [perf([135, 135, 135].map((w) => ({ sessionId: 1, exerciseId: 'bb_back_squat', exerciseName: 'Squat', blockIdx: 1, itemIdx: 0, setIdx: 0, weight: w, reps: 5, rpe: 8, loggedAt: '' })))]]])
+    const plan = buildRulesPlan({ equipment: garage, profile: DEFAULT_PROFILE, type: 'strength', variant: 'A', history })
+    expect(plan.blocks[1].items[0].targetWeight).toBe(145)
+    expect(plan.blocks[1].items[0].cue).toMatch(/45 × 8 · 80 × 5 · 80 × 3|45 × 8 · 80 × 5/)
   })
 })

@@ -168,3 +168,34 @@ export function parseList(s: string): number[] {
   }
   return [...new Set(out)].sort((a, b) => a - b)
 }
+
+/**
+ * What to load for a target weight: plates for ONE side of a barbell (bar weight excluded),
+ * or plates on the free end of a landmine. Biggest plates first. null = can't make it exactly.
+ */
+export function platesFor(total: number, loading: 'barbell' | 'landmine', items: Equipment[]): number[] | null {
+  const bar = items.find((e) => e.kind === 'barbell')?.barWeight ?? 45
+  let remaining = loading === 'barbell' ? (total - bar) / 2 : total
+  if (remaining < -1e-9) return null
+  const stock = items
+    .filter((e) => e.kind === 'plates')
+    .flatMap((e) => e.plates ?? [])
+    .map((p) => ({ weight: p.weight, count: loading === 'barbell' ? p.pairs : p.pairs * 2 }))
+    .sort((a, b) => b.weight - a.weight)
+  const out: number[] = []
+  for (const p of stock) {
+    while (p.count > 0 && remaining >= p.weight - 1e-9) {
+      out.push(p.weight)
+      remaining -= p.weight
+      p.count--
+    }
+  }
+  return Math.abs(remaining) < 1e-9 ? out : null
+}
+
+export function describePlates(total: number, loading: 'barbell' | 'landmine', items: Equipment[]): string {
+  const plates = platesFor(total, loading, items)
+  if (plates == null) return ''
+  if (plates.length === 0) return loading === 'barbell' ? 'Empty bar' : 'No plates'
+  return `${loading === 'barbell' ? 'Each side' : 'On the end'}: ${plates.join(' + ')}`
+}
