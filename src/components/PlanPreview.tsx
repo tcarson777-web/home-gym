@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { fmtTime, repsLabel } from '../lib/format'
+import Figure from './Figure'
 import type { Plan } from '../lib/types'
 
 // Read-only view of a plan: every block, exercise, sets × reps, target weight and rest.
@@ -30,7 +31,10 @@ export default function PlanPreview({ plan, onRemove }: { plan: Plan; onRemove?:
             {open &&
               block.items.map((it, i) => (
                 <div key={i} className="preview-row" onClick={() => onRemove?.(it.exerciseId, it.name)} role={onRemove ? 'button' : undefined}>
-                  <span className="grow">{it.isMainLift ? <b>{it.name}</b> : it.name}</span>
+                  <span className="grow row" style={{ gap: 8 }}>
+                    <span className="preview-thumb"><Figure exerciseId={it.exerciseId} size={44} first /></span>
+                    <span>{it.isMainLift ? <b>{it.name}</b> : it.name}</span>
+                  </span>
                   <span className="preview-rx">
                     {repsLabel(it)}
                     {it.restSec > 0 && it.kind === 'reps' && <span className="muted"> · rest {fmtTime(it.restSec)}</span>}

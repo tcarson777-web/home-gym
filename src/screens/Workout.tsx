@@ -6,6 +6,8 @@ import { db } from '../lib/db'
 import { describePlates, isWeighted, loadsFor, nextDown, nextUp } from '../lib/equipment'
 import { EXERCISE_BY_ID } from '../lib/exercises'
 import { fmtTime as fmt, repsLabel } from '../lib/format'
+import Figure from '../components/Figure'
+import { FIGURES, howToUrl } from '../lib/figures'
 import { EFFORT_OPTIONS, type Equipment, type PlanItem, type Session, type SetLog } from '../lib/types'
 
 const key = (b: number, i: number) => `${b}:${i}`
@@ -147,7 +149,13 @@ export default function WorkoutScreen({ sessionId, onClose }: { sessionId: numbe
                   </div>
                   {it.restSec > 0 && <span className="pill">rest {fmt(it.restSec)}</span>}
                 </button>
+                {isActive && <Figure exerciseId={it.exerciseId} size={(FIGURES[it.exerciseId]?.length ?? 0) > 2 ? 72 : 96} />}
                 {isActive && it.cue && <p className="small muted">{it.cue}</p>}
+                {isActive && (
+                  <a className="small" href={howToUrl(it.name)} target="_blank" rel="noreferrer" style={{ color: 'var(--accent)' }}>
+                    ▶ How to (video)
+                  </a>
+                )}
                 {it.kind === 'time' ? (
                   <TimeItem
                     item={it}
