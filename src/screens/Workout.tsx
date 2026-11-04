@@ -7,6 +7,8 @@ import { describePlates, isWeighted, loadsFor, nextDown, nextUp } from '../lib/e
 import { EXERCISE_BY_ID } from '../lib/exercises'
 import { fmtTime as fmt, repsLabel } from '../lib/format'
 import Figure from '../components/Figure'
+import SwapSheet from '../components/SwapSheet'
+import { excludeExercise, getSwapOptions } from '../lib/schedule'
 import { FIGURES, howToUrl } from '../lib/figures'
 import { EFFORT_OPTIONS, type Equipment, type PlanItem, type Session, type SetLog } from '../lib/types'
 
@@ -32,6 +34,7 @@ export default function WorkoutScreen({ sessionId, onClose }: { sessionId: numbe
   const restEndsAt = session?.restEndsAt ?? null
   const setRestEndsAt = (endsAt: number | null) => db.sessions.update(sessionId, { restEndsAt: endsAt })
   const now = useNow(true)
+  const [sheet, setSheet] = useState<{ b: number; i: number; options?: PlanItem[] } | null>(null)
 
   useEffect(() => {
     void keepScreenOn(true)
@@ -69,9 +72,10 @@ export default function WorkoutScreen({ sessionId, onClose }: { sessionId: numbe
   const s: Session = session
 
   const isComplete = (b: number, i: number, it: PlanItem) =>
-    it.kind === 'reps'
+    it.skipped ||
+    (it.kind === 'reps'
       ? (setsByItem.get(key(b, i)) ?? []).filter((x) => !x.warmup).length >= it.sets
-      : Array.from({ length: it.sets }, (_, n) => s.checked.includes(`${key(b, i)}:${n}`)).every(Boolean)
+      : Array.from({ length: it.sets }, (_, n) => s.checked.includes(`${key(b, i)}:${n}`)).every(Boolean))
 
   const order: [number, number][] = s.plan.blocks.flatMap((bl, b) => bl.items.map((_, i) => [b, i] as [number, number]))
   const firstOpen = order.find(([b, i]) => !isComplete(b, i, s.plan.blocks[b].items[i]))
@@ -113,6 +117,24 @@ export default function WorkoutScreen({ sessionId, onClose }: { sessionId: numbe
     onClose()
   }
 
+  // Swapping is only offered before you've logged anything for that exercise.
+  const started = (b: number, i: number) =>
+    (setsByItem.get(key(b, i))?.length ?? 0) > 0 || s.checked.some((c) => c.startsWith(`${key(b, i)}:`))
+
+  async function replaceItem(b: number, i: number, item: PlanItem) {
+    await db.transaction('rw', db.sessions, async () => {
+      const cur = await db.sessions.get(sessionId)
+      if (!cur) return
+      const blocks = cur.plan.blocks.map((bl, bb) => (bb === b ? { ...bl, items: bl.items.map((x, ii) => (ii === i ? item : x)) } : bl))
+      await db.sessions.update(sessionId, { plan: { ...cur.plan, blocks } })
+    })
+  }
+
+  function openSwap(b: number, i: number) {
+    setSheet({ b, i })
+    getSwapOptions(s.plan, b, i).then((options) => setSheet((cur) => (cur && cur.b === b && cur.i === i ? { ...cur, options } : cur)))
+  }
+
   const elapsed = (now - new Date(s.date).getTime()) / 1000
   // Hide a timer that ran out more than 5 minutes ago.
   const restLeft = restEndsAt && now - restEndsAt < 300_000 ? (restEndsAt - now) / 1000 : null
@@ -141,20 +163,34 @@ export default function WorkoutScreen({ sessionId, onClose }: { sessionId: numbe
             const done = isComplete(b, i, it)
             const isActive = current === k
             return (
-              <div key={k} className={`card stack ${isActive ? 'active' : ''} ${done && !isActive ? 'done' : ''}`}>
+              it.skipped ? (
+                <div key={`${k}:${it.exerciseId}`} className="card row between done">
+                  <span>
+                    <span className="skipped">{it.name}</span>
+                    <span className="muted small" style={{ display: 'block' }}>Skipped today</span>
+                  </span>
+                  <button className="btn ghost sm" onClick={() => replaceItem(b, i, { ...it, skipped: false })}>Undo</button>
+                </div>
+              ) : (
+              <div key={`${k}:${it.exerciseId}`} className={`card stack ${isActive ? 'active' : ''} ${done && !isActive ? 'done' : ''}`}>
                 <button className="row between" style={{ background: 'none', border: 0, padding: 0, textAlign: 'left' }} onClick={() => setActiveKey(isActive ? null : k)}>
                   <div className="grow">
                     <h3>{done ? '✓ ' : ''}{it.name}</h3>
-                    <p className="muted small">{repsLabel(it)}</p>
+                    <p className="muted small">{repsLabel(it)}{it.swappedFrom ? ` · instead of ${it.swappedFrom}` : ''}</p>
                   </div>
                   {it.restSec > 0 && <span className="pill">rest {fmt(it.restSec)}</span>}
                 </button>
                 {isActive && <Figure exerciseId={it.exerciseId} size={(FIGURES[it.exerciseId]?.length ?? 0) > 2 ? 72 : 96} />}
                 {isActive && it.cue && <p className="small muted">{it.cue}</p>}
                 {isActive && (
-                  <a className="small" href={howToUrl(it.name)} target="_blank" rel="noreferrer" style={{ color: 'var(--accent)' }}>
-                    ▶ How to (video)
-                  </a>
+                  <div className="row between">
+                    <a className="small" href={howToUrl(it.name)} target="_blank" rel="noreferrer" style={{ color: 'var(--accent)' }}>
+                      ▶ How to (video)
+                    </a>
+                    {!started(b, i) && (
+                      <button className="btn ghost sm" onClick={() => openSwap(b, i)}>⇄ Swap / skip</button>
+                    )}
+                  </div>
                 )}
                 {it.kind === 'time' ? (
                   <TimeItem
@@ -185,6 +221,7 @@ export default function WorkoutScreen({ sessionId, onClose }: { sessionId: numbe
                   />
                 )}
               </div>
+              )
             )
           })}
         </div>
@@ -192,6 +229,27 @@ export default function WorkoutScreen({ sessionId, onClose }: { sessionId: numbe
 
       <button className="btn primary big" onClick={finish}>Finish workout</button>
       <button className="btn danger ghost" onClick={() => discard()}>Discard workout</button>
+
+      {sheet && (
+        <SwapSheet
+          item={s.plan.blocks[sheet.b].items[sheet.i]}
+          options={sheet.options}
+          onClose={() => setSheet(null)}
+          onSwap={async (replacement, never) => {
+            const current = s.plan.blocks[sheet.b].items[sheet.i]
+            setSheet(null)
+            await replaceItem(sheet.b, sheet.i, replacement)
+            if (never) await excludeExercise(current.exerciseId)
+          }}
+          onSkip={async (never) => {
+            const current = s.plan.blocks[sheet.b].items[sheet.i]
+            setSheet(null)
+            await replaceItem(sheet.b, sheet.i, { ...current, skipped: true })
+            if (never) await excludeExercise(current.exerciseId)
+            autoFollow()
+          }}
+        />
+      )}
 
       {restLeft != null && (
         <div className={`timer-bar ${restLeft <= 0 ? 'over' : ''}`}>

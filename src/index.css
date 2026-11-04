@@ -140,3 +140,11 @@ textarea.input { min-height: 80px; resize: vertical; }
 .figure-band { stroke: var(--accent); stroke-width: 1.6; stroke-dasharray: 2 2; }
 
 .preview-thumb:empty { display: none; }
+
+/* Bottom sheet (swap menu) */
+.sheet-backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.55); z-index: 40; display: flex; align-items: flex-end; justify-content: center; }
+.sheet { width: 100%; max-width: 560px; max-height: 85dvh; overflow-y: auto; background: var(--surface); border-radius: 18px 18px 0 0; border: 1px solid var(--border); padding: 18px 16px calc(18px + env(safe-area-inset-bottom)); }
+.sheet-option { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 56px; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface-2); text-align: left; font-weight: 600; }
+.swap-btn { min-width: 44px; min-height: 44px; border-radius: 10px; border: 1px solid var(--border); background: transparent; color: var(--muted); font-size: 1.1rem; flex: none; }
+.preview-detail { padding: 4px 0 12px; }
+.skipped { text-decoration: line-through; color: var(--muted); }

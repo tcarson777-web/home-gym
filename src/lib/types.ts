@@ -77,6 +77,8 @@ export interface PlanItem {
   restSec: number
   cue?: string
   isMainLift?: boolean
+  swappedFrom?: string // name of the exercise this replaced for today
+  skipped?: boolean // skipped for today only
 }
 
 export interface PlanBlock {

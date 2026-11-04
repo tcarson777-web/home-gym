@@ -1,7 +1,7 @@
 import { db, getProfile } from './db'
-import { buildRulesPlan } from './planner'
+import { buildRulesPlan, swapOptions } from './planner'
 import type { Performance } from './progression'
-import type { Plan, Session, SessionType, SetLog } from './types'
+import type { Plan, PlanItem, Session, SessionType, SetLog } from './types'
 
 /** Monday 00:00 local time of the week containing `d`. */
 export function weekStart(d = new Date()): Date {
@@ -78,4 +78,18 @@ export async function buildNextPlan(type: SessionType): Promise<Plan> {
 /** Start a session from the plan the user previewed, so what they saw is what they get. */
 export async function startSession(plan: Plan, bonus: boolean): Promise<number> {
   return (await db.sessions.add({ date: new Date().toISOString(), type: plan.type, status: 'in_progress', plan, bonus, checked: [] })) as number
+}
+
+/** Alternatives for one exercise in a plan (preview or workout in progress). */
+export async function getSwapOptions(plan: Plan, blockIdx: number, itemIdx: number): Promise<PlanItem[]> {
+  const [equipment, profile, history] = await Promise.all([db.equipment.toArray(), getProfile(), loadHistory()])
+  const block = plan.blocks[blockIdx]
+  const inPlan = new Set(plan.blocks.flatMap((b) => b.items.filter((it) => !it.skipped).map((it) => it.exerciseId)))
+  return swapOptions(block.items[itemIdx], block.name, { equipment, profile, history, type: plan.type, variant: plan.variant ?? 'A' }, inPlan)
+}
+
+/** Stop suggesting an exercise in future plans (undo in Settings). */
+export async function excludeExercise(exerciseId: string) {
+  const p = await getProfile()
+  await db.profile.put({ ...p, excludedExercises: [...new Set([...(p.excludedExercises ?? []), exerciseId])] })
 }

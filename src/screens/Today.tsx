@@ -1,9 +1,11 @@
 import { useLiveQuery } from 'dexie-react-hooks'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import PlanPreview from '../components/PlanPreview'
+import SwapSheet from '../components/SwapSheet'
 import { db, DEFAULT_PROFILE, sessionRange } from '../lib/db'
-import { buildNextPlan, startSession, weekStatus } from '../lib/schedule'
-import type { Session, SessionType } from '../lib/types'
+import { estimateMinutes } from '../lib/planner'
+import { buildNextPlan, excludeExercise, getSwapOptions, startSession, weekStatus } from '../lib/schedule'
+import type { Plan, PlanItem, Session, SessionType } from '../lib/types'
 
 interface Props {
   activeSession: Session | undefined
@@ -26,13 +28,48 @@ export default function TodayScreen({ activeSession, onOpenWorkout, goTo }: Prop
   const [picked, setPicked] = useState<SessionType | null>(null)
   const type = picked ?? week.suggested
   // Re-builds automatically when equipment, profile or history change.
-  const plan = useLiveQuery(() => buildNextPlan(type), [type])
+  const basePlan = useLiveQuery(() => buildNextPlan(type), [type])
+
+  // Today's swaps and skips, layered on the generated plan until you start (or reset).
+  // Keyed by session type + position; dropped if the generated plan changes underneath.
+  const [overrides, setOverrides] = useState<Record<string, { origId: string; item: PlanItem }>>({})
+  const [sheet, setSheet] = useState<{ b: number; i: number; options?: PlanItem[] } | null>(null)
+  const excluded = profile?.excludedExercises ?? []
+  const plan: Plan | undefined = useMemo(() => {
+    if (!basePlan) return undefined
+    const blocks = basePlan.blocks.map((bl, b) => ({
+      ...bl,
+      items: bl.items.map((it, i) => {
+        const o = overrides[`${type}|${b}:${i}`]
+        return o && (it.exerciseId === o.origId || excluded.includes(o.origId)) ? o.item : it
+      }),
+    }))
+    return { ...basePlan, blocks, estimatedMinutes: estimateMinutes(blocks) }
+  }, [basePlan, overrides, type, excluded])
+  const hasChanges = Object.keys(overrides).some((k) => k.startsWith(`${type}|`))
+
+  const setOverride = (b: number, i: number, item: PlanItem | null) =>
+    setOverrides((prev) => {
+      const next = { ...prev }
+      const k = `${type}|${b}:${i}`
+      if (item) next[k] = { origId: prev[k]?.origId ?? basePlan!.blocks[b].items[i].exerciseId, item }
+      else delete next[k]
+      return next
+    })
+
+  function openSwap(b: number, i: number) {
+    if (!plan) return
+    setSheet({ b, i })
+    getSwapOptions(plan, b, i).then((options) => setSheet((cur) => (cur && cur.b === b && cur.i === i ? { ...cur, options } : cur)))
+  }
 
   async function start() {
     if (!plan) return
     setBusy(true)
     try {
-      onOpenWorkout(await startSession(plan, isBonus))
+      const id = await startSession(plan, isBonus)
+      setOverrides((prev) => Object.fromEntries(Object.entries(prev).filter(([k]) => !k.startsWith(`${type}|`))))
+      onOpenWorkout(id)
     } finally {
       setBusy(false)
     }
@@ -120,13 +157,42 @@ export default function TodayScreen({ activeSession, onOpenWorkout, goTo }: Prop
               </button>
               <PlanPreview
                 plan={plan}
-                onRemove={async (id, name) => {
-                  if (!confirm(`Stop suggesting “${name}”?\n\nSomething else will take its place. You can bring it back in Settings.`)) return
-                  const p = (await db.profile.get('me')) ?? DEFAULT_PROFILE
-                  await db.profile.put({ ...p, excludedExercises: [...new Set([...(p.excludedExercises ?? []), id])] })
+                onSwap={openSwap}
+                onUnskip={(b, i) => {
+                  const cur = plan.blocks[b].items[i]
+                  setOverride(b, i, cur.swappedFrom ? { ...cur, skipped: false } : null)
                 }}
               />
-              <p className="muted small center">Tap an exercise to stop it being suggested.</p>
+              <p className="muted small center">
+                Tap an exercise for details · ⇄ to swap or skip it today
+                {hasChanges && (
+                  <>
+                    {' · '}
+                    <button className="btn ghost sm" style={{ minHeight: 0, padding: 0, color: 'var(--accent)' }} onClick={() => setOverrides((prev) => Object.fromEntries(Object.entries(prev).filter(([k]) => !k.startsWith(`${type}|`))))}>
+                      Reset changes
+                    </button>
+                  </>
+                )}
+              </p>
+              {sheet && (
+                <SwapSheet
+                  item={plan.blocks[sheet.b].items[sheet.i]}
+                  options={sheet.options}
+                  onClose={() => setSheet(null)}
+                  onSwap={(replacement, never) => {
+                    const current = plan.blocks[sheet.b].items[sheet.i]
+                    setOverride(sheet.b, sheet.i, replacement)
+                    if (never) void excludeExercise(current.exerciseId)
+                    setSheet(null)
+                  }}
+                  onSkip={(never) => {
+                    const current = plan.blocks[sheet.b].items[sheet.i]
+                    setOverride(sheet.b, sheet.i, { ...current, skipped: true })
+                    if (never) void excludeExercise(current.exerciseId)
+                    setSheet(null)
+                  }}
+                />
+              )}
             </>
           ) : (
             <p className="muted">Building your workout…</p>

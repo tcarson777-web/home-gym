@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { barbellLoads, capabilities, describePlates, dumbbellLoads, landmineLoads, loadsFor, parseList, platesFor } from './equipment'
 import { equipmentUsage, guessKind } from './usage'
 import { canDo, EXERCISE_BY_ID } from './exercises'
-import { buildRulesPlan, type PlanContext } from './planner'
+import { buildRulesPlan, estimateMinutes, swapOptions, type PlanContext } from './planner'
 import { prescribe, type Performance } from './progression'
 import type { Equipment, Profile, SetLog } from './types'
 import { DEFAULT_PROFILE, sessionRange } from './db'
@@ -328,5 +328,40 @@ describe('plate calculator & warm-up weights', () => {
     const plan = buildRulesPlan({ equipment: garage, profile: DEFAULT_PROFILE, type: 'strength', variant: 'A', history })
     expect(plan.blocks[1].items[0].targetWeight).toBe(145)
     expect(plan.blocks[1].items[0].cue).toMatch(/45 × 8 · 80 × 5 · 80 × 3|45 × 8 · 80 × 5/)
+  })
+})
+
+describe('swap options', () => {
+  const ctx: PlanContext = { equipment: garage, profile: DEFAULT_PROFILE, type: 'strength', variant: 'A', history: new Map() }
+  const plan = buildRulesPlan(ctx)
+  const inPlan = new Set(plan.blocks.flatMap((b) => b.items.map((i) => i.exerciseId)))
+  const find = (id: string) => {
+    for (const b of plan.blocks) for (const it of b.items) if (it.exerciseId === id) return { it, block: b.name }
+    throw new Error(id)
+  }
+
+  it('bench press can swap to other pushes you can do, as a main lift', () => {
+    const { it: bench, block } = find('bb_bench')
+    const opts = swapOptions(bench, block, ctx, inPlan)
+    expect(opts.map((o) => o.exerciseId)).toEqual(expect.arrayContaining(['db_bench', 'db_floor_press', 'bw_pushup']))
+    expect(opts.every((o) => o.isMainLift && o.swappedFrom === 'Barbell bench press')).toBe(true)
+  })
+  it('never offers something already in the plan, removed by you, or not doable', () => {
+    const { it: row, block } = find('bb_row')
+    const withBar = [...garage, { kind: 'pullup_bar', name: 'Bar' } as Equipment]
+    const ids = swapOptions(row, block, { ...ctx, equipment: withBar, profile: { ...DEFAULT_PROFILE, excludedExercises: ['db_row'] } }, inPlan).map((o) => o.exerciseId)
+    expect(ids).not.toContain('db_row')
+    expect(ids).not.toContain('ring_row') // no rings in this garage
+    expect(ids).toContain('pullup') // horizontal and vertical pulls are interchangeable
+  })
+  it('timed core moves swap to timed core moves', () => {
+    const core = plan.blocks[2].items.find((i) => EXERCISE_BY_ID.get(i.exerciseId)!.pattern === 'core')!
+    const opts = swapOptions(core, 'Accessories', ctx, inPlan)
+    expect(opts.length).toBeGreaterThan(0)
+    expect(opts.filter((o) => o.exerciseId !== 'hanging_knee_raise').every((o) => o.kind === 'time')).toBe(true)
+  })
+  it('skipped exercises are left out of the time estimate', () => {
+    const blocks = plan.blocks.map((b) => ({ ...b, items: b.items.map((it) => ({ ...it, skipped: true })) }))
+    expect(estimateMinutes(blocks)).toBe(0)
   })
 })

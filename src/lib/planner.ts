@@ -55,6 +55,7 @@ export function estimateMinutes(blocks: PlanBlock[]): number {
   let sec = 0
   for (const b of blocks) {
     for (const it of b.items) {
+      if (it.skipped) continue
       const sides = it.perSide ? 2 : 1
       const work = it.kind === 'time' ? (it.seconds ?? 30) * sides : ((it.repsMax ?? it.reps ?? 8) * 4 + 10) * sides
       sec += it.sets * work + Math.max(0, it.sets - 1) * it.restSec
@@ -286,4 +287,32 @@ export function buildRulesPlan(ctx: PlanContext): Plan {
     plan.estimatedMinutes = estimateMinutes(plan.blocks)
   }
   return plan
+}
+
+// Patterns that count as the same "slot" when swapping.
+const SWAP_GROUPS: Pattern[][] = [['hpull', 'vpull']]
+// Floor / stretch moves are done for time; everything else for reps.
+const TIMED_PATTERNS: Pattern[] = ['core', 'warmup', 'yoga', 'mobility']
+
+/**
+ * Exercises that could replace `item` today: same movement type, fits your equipment,
+ * not removed by you and not already in the plan. Same role (main / secondary / accessory).
+ */
+export function swapOptions(item: PlanItem, blockName: string, ctx: PlanContext, inPlan: Set<string>): PlanItem[] {
+  const ex = EXERCISE_BY_ID.get(item.exerciseId)
+  if (!ex) return []
+  const { available, loads } = makePicker(ctx.equipment, ctx.profile.excludedExercises)
+  const patterns = SWAP_GROUPS.find((g) => g.includes(ex.pattern)) ?? [ex.pattern]
+  const role: Role = item.isMainLift ? 'main' : blockName === 'Main lifts' ? 'secondary' : 'accessory'
+  return EXERCISES.filter((e) => patterns.includes(e.pattern) && e.id !== ex.id && !inPlan.has(e.id) && available(e))
+    .slice(0, 8)
+    .map((e) => {
+      const timed = TIMED_PATTERNS.includes(e.pattern) && e.loading === 'bodyweight' && e.id !== 'hanging_knee_raise'
+      const next = timed
+        ? timeItem(e.id, item.seconds ?? 40, { sets: item.sets, restSec: item.restSec, perSide: /per side/i.test(e.cue) })
+        : e.pattern === 'carry'
+          ? timeItem(e.id, item.seconds ?? 40, { sets: item.sets, restSec: item.restSec, targetWeight: loads(e.loading)[Math.floor(loads(e.loading).length * 0.6)] })
+          : liftItem(e, role, ctx, loads(e.loading))
+      return { ...next, swappedFrom: item.swappedFrom ?? item.name }
+    })
 }
