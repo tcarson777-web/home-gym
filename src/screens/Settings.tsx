@@ -1,6 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useEffect, useState } from 'react'
 import { db, DEFAULT_PROFILE, exportBackup, importBackup } from '../lib/db'
+import { EXERCISE_BY_ID } from '../lib/exercises'
 import type { Experience, Profile } from '../lib/types'
 
 const EXPERIENCE: { value: Experience; label: string }[] = [
@@ -102,6 +103,25 @@ export default function SettingsScreen() {
             <input className="input" type="number" inputMode="numeric" value={p.sessionsPerWeek} onChange={(e) => set({ sessionsPerWeek: Math.max(1, parseInt(e.target.value) || 3) })} />
           </label>
         <button className="btn primary" onClick={save}>{saved ? 'Saved ✓' : 'Save'}</button>
+      </div>
+
+      <div className="card stack">
+        <h2>Removed exercises</h2>
+        {stored === undefined ? null : (stored?.excludedExercises ?? []).length === 0 ? (
+          <p className="muted small">None. To stop an exercise being suggested, tap it in the workout preview on the Today screen.</p>
+        ) : (
+          (stored?.excludedExercises ?? []).map((id) => (
+            <div key={id} className="row between">
+              <span>{EXERCISE_BY_ID.get(id)?.name ?? id}</span>
+              <button
+                className="btn sm"
+                onClick={() => db.profile.update('me', { excludedExercises: (stored?.excludedExercises ?? []).filter((x) => x !== id) })}
+              >
+                Bring back
+              </button>
+            </div>
+          ))
+        )}
       </div>
 
       <div className="card stack">

@@ -164,8 +164,9 @@ describe('equipment diagnostics', () => {
   it('explains that a rack and bench need a barbell or dumbbells', () => {
     const r = u([{ kind: 'rack', name: 'Rack' }, { kind: 'bench', name: 'Bench', incline: true }])
     expect(r.get(1)!.warning).toMatch(/Barbell/)
-    expect(r.get(2)!.warning).toMatch(/Barbell/)
-    expect(r.get(2)!.warning).toMatch(/Dumbbells/)
+    // A bench alone is usable now (bench dips), and lists what more gear would unlock
+    expect(r.get(2)!.warning).toBeUndefined()
+    expect(r.get(2)!.inPlans).toContain('Bench dip')
   })
   it('points at a barbell saved as Other', () => {
     const r = u([{ kind: 'rack', name: 'Rack' }, { kind: 'other', name: 'Olympic bar' }])
@@ -183,7 +184,8 @@ describe('equipment diagnostics', () => {
   it('flags dumbbells with no weights, and the bench that depends on them', () => {
     const r = u([{ kind: 'fixed_dumbbells', name: 'Dumbbells', weights: [] }, { kind: 'bench', name: 'Bench' }])
     expect(r.get(1)!.warning).toMatch(/No weights entered/)
-    expect(r.get(2)!.warning).toMatch(/no weights entered/)
+    const rack = u([{ kind: 'fixed_dumbbells', name: 'Dumbbells', weights: [] }, { kind: 'rack', name: 'Rack' }])
+    expect(rack.get(1)!.warning).toMatch(/No weights entered/)
   })
   it('is happy with a normal garage', () => {
     const r = u(garage)
@@ -210,5 +212,52 @@ describe('band-assisted pull-ups', () => {
   })
   it('unassisted history still progresses by reps', () => {
     expect(prescribe(pullup, scheme, [perf([set(6), set(5), set(5)])], []).reps).toBe(6)
+  })
+})
+
+describe('arms, carries and removed exercises', () => {
+  const ctx = (equipment: Equipment[], variant: 'A' | 'B', profile: Profile = DEFAULT_PROFILE): PlanContext => ({ equipment, profile, type: 'strength', variant, history: new Map() })
+  const ids = (c: PlanContext) => buildRulesPlan(c).blocks.flatMap((b) => b.items.map((i) => i.exerciseId))
+  const myGarage: Equipment[] = [
+    { kind: 'barbell', name: 'Bar', barWeight: 45 },
+    { kind: 'plates', name: 'Plates', plates: [{ weight: 45, pairs: 2 }, { weight: 25, pairs: 1 }, { weight: 10, pairs: 1 }, { weight: 5, pairs: 1 }, { weight: 2.5, pairs: 1 }] },
+    { kind: 'rack', name: 'Rack' },
+    { kind: 'bench', name: 'Bench', incline: true },
+    { kind: 'landmine', name: 'Landmine' },
+    { kind: 'pullup_bar', name: 'Pull-up bar' },
+    { kind: 'bands', name: 'Bands', bandLevels: ['light', 'medium', 'heavy'] },
+    { kind: 'kettlebells', name: 'KB', weights: [10] },
+  ]
+
+  it('both strength days include a biceps and a triceps exercise, within 60 min', () => {
+    for (const v of ['A', 'B'] as const) {
+      const plan = buildRulesPlan(ctx(myGarage, v))
+      const pats = plan.blocks.flatMap((b) => b.items.map((i) => EXERCISE_BY_ID.get(i.exerciseId)!.pattern))
+      expect(pats).toContain('biceps')
+      expect(pats).toContain('triceps')
+      expect(plan.estimatedMinutes).toBeLessThanOrEqual(60)
+    }
+  })
+  it('varies arm exercises between A and B when there are options', () => {
+    const arm = (v: 'A' | 'B') => ids(ctx(myGarage, v)).filter((i) => ['biceps', 'triceps'].includes(EXERCISE_BY_ID.get(i)!.pattern))
+    expect(arm('A')).not.toEqual(arm('B'))
+  })
+  it('barbell curls use an accessory rep range, not 3 × 5', () => {
+    const curl = buildRulesPlan(ctx(myGarage, 'A')).blocks[2].items.find((i) => i.exerciseId === 'bb_curl')!
+    expect(curl.repsMax).toBe(12)
+  })
+  it('skips farmer carries with a 10 lb kettlebell', () => {
+    for (const v of ['A', 'B'] as const) expect(ids(ctx(myGarage, v))).not.toContain('kb_farmer_carry')
+    const heavy = [...myGarage, { kind: 'kettlebells', name: 'KB2', weights: [35, 53] } as Equipment]
+    expect(ids(ctx(heavy, 'B'))).toContain('kb_farmer_carry')
+  })
+  it('removed exercises are never suggested, and something else takes their place', () => {
+    const profile = { ...DEFAULT_PROFILE, excludedExercises: ['bb_curl', 'wu_inchworm', 'bb_back_squat'] }
+    const a = ids(ctx(myGarage, 'A', profile))
+    expect(a).not.toContain('bb_curl')
+    expect(a).not.toContain('wu_inchworm')
+    expect(a).not.toContain('bb_back_squat')
+    expect(a).toContain('band_curl')
+    expect(a).toContain('lm_squat')
   })
 })

@@ -57,6 +57,7 @@ export interface Profile {
   sessionMaxMinutes?: number // longest acceptable session (missing in older saved profiles)
   warmupMinutes: number
   sessionsPerWeek: number
+  excludedExercises?: string[] // exercise ids you never want suggested
 }
 
 export type SessionType = 'strength' | 'mobility'

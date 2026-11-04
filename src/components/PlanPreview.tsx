@@ -3,7 +3,8 @@ import { fmtTime, repsLabel } from '../lib/format'
 import type { Plan } from '../lib/types'
 
 // Read-only view of a plan: every block, exercise, sets × reps, target weight and rest.
-export default function PlanPreview({ plan }: { plan: Plan }) {
+// Tapping an exercise offers to remove it from future workouts (onRemove).
+export default function PlanPreview({ plan, onRemove }: { plan: Plan; onRemove?: (exerciseId: string, name: string) => void }) {
   const [showWarmup, setShowWarmup] = useState(false)
   return (
     <div className="stack" style={{ gap: 14 }}>
@@ -28,7 +29,7 @@ export default function PlanPreview({ plan }: { plan: Plan }) {
             </button>
             {open &&
               block.items.map((it, i) => (
-                <div key={i} className="preview-row">
+                <div key={i} className="preview-row" onClick={() => onRemove?.(it.exerciseId, it.name)} role={onRemove ? 'button' : undefined}>
                   <span className="grow">{it.isMainLift ? <b>{it.name}</b> : it.name}</span>
                   <span className="preview-rx">
                     {repsLabel(it)}

@@ -118,7 +118,15 @@ export default function TodayScreen({ activeSession, onOpenWorkout, goTo }: Prop
               <button className="btn primary big" disabled={busy} onClick={start}>
                 {isBonus ? '💪 Start bonus session' : 'Start workout'}
               </button>
-              <PlanPreview plan={plan} />
+              <PlanPreview
+                plan={plan}
+                onRemove={async (id, name) => {
+                  if (!confirm(`Stop suggesting “${name}”?\n\nSomething else will take its place. You can bring it back in Settings.`)) return
+                  const p = (await db.profile.get('me')) ?? DEFAULT_PROFILE
+                  await db.profile.put({ ...p, excludedExercises: [...new Set([...(p.excludedExercises ?? []), id])] })
+                }}
+              />
+              <p className="muted small center">Tap an exercise to stop it being suggested.</p>
             </>
           ) : (
             <p className="muted">Building your workout…</p>

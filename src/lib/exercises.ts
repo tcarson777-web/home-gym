@@ -10,6 +10,8 @@ export type Pattern =
   | 'single_leg'
   | 'core'
   | 'carry'
+  | 'biceps'
+  | 'triceps'
   | 'warmup'
   | 'yoga'
   | 'mobility'
@@ -65,6 +67,15 @@ export const EXERCISES: Exercise[] = [
   { id: 'db_bulgarian', name: 'Dumbbell Bulgarian split squat', pattern: 'single_leg', loading: 'dumbbell', requires: ['dumbbell', 'bench'], lowerBody: true, cue: 'Back foot on the bench, front shin mostly vertical. Reps per leg.' },
   { id: 'bw_step_up', name: 'Step-up', pattern: 'single_leg', loading: 'bodyweight', requires: ['box'], lowerBody: true, cue: 'Drive through the top foot, control the way down. Reps per leg.' },
   { id: 'bw_reverse_lunge', name: 'Reverse lunge', pattern: 'single_leg', loading: 'bodyweight', requires: [], lowerBody: true, cue: 'Step back, both knees to 90°. Reps are per leg.' },
+  // Arms (accessories). Bench/press already work triceps and rows/pull-ups biceps; these add direct work.
+  { id: 'db_curl', name: 'Dumbbell curl', pattern: 'biceps', loading: 'dumbbell', requires: ['dumbbell'], cue: 'Elbows pinned to your sides, no swinging, lower slowly.' },
+  { id: 'bb_curl', name: 'Barbell curl', pattern: 'biceps', loading: 'barbell', requires: ['barbell'], cue: 'Shoulder-width grip, elbows at your sides, no hip swing. Lower for 2–3 seconds.' },
+  { id: 'band_curl', name: 'Band curl', pattern: 'biceps', loading: 'band', requires: ['band'], cue: 'Stand on the band, elbows pinned, squeeze at the top.' },
+  { id: 'chinup', name: 'Chin-up (palms facing you)', pattern: 'biceps', loading: 'bodyweight', requires: ['pullup_bar'], assistable: true, cue: 'Palms toward you, shoulder-width, chin over the bar. Use a band if needed.' },
+  { id: 'db_oh_extension', name: 'Dumbbell overhead triceps extension', pattern: 'triceps', loading: 'dumbbell', requires: ['dumbbell'], cue: 'Hold one bell overhead with both hands, lower behind your head, elbows pointing up.' },
+  { id: 'band_pushdown', name: 'Band triceps pushdown', pattern: 'triceps', loading: 'band', requires: ['band'], cue: 'Anchor the band high (rack or pull-up bar), elbows at your sides, push down to straight arms.' },
+  { id: 'diamond_pushup', name: 'Close-grip (diamond) push-up', pattern: 'triceps', loading: 'bodyweight', requires: [], cue: 'Hands close under your chest, elbows brushing your ribs. Knees down to make it easier.' },
+  { id: 'bench_dip', name: 'Bench dip', pattern: 'triceps', loading: 'bodyweight', requires: ['bench'], cue: 'Hands on the bench edge, lower until elbows reach ~90°. Stop short if your shoulders complain.' },
   // Carry
   { id: 'db_farmer_carry', name: 'Farmer carry (dumbbells)', pattern: 'carry', loading: 'dumbbell', requires: ['dumbbell'], cue: 'Heavy bells, tall posture, short quick steps.' },
   { id: 'kb_farmer_carry', name: 'Farmer carry (kettlebells)', pattern: 'carry', loading: 'kettlebell', requires: ['kettlebell'], cue: 'Heavy bells, tall posture, short quick steps.' },

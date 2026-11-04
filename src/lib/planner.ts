@@ -18,14 +18,20 @@ export interface PlanContext {
   recovery?: RecoverySignals | null // not used by the rules yet; reserved for Fitbit
 }
 
-function makePicker(equipment: Equipment[]) {
+// Carries are pointless with light weights: require at least this per hand.
+const MIN_CARRY_LB = 35
+
+function makePicker(equipment: Equipment[], excluded: string[] = []) {
   const caps = capabilities(equipment)
   const loadCache = new Map<Loading, number[]>()
   const loads = (l: Loading) => {
     if (!loadCache.has(l)) loadCache.set(l, loadsFor(l, equipment))
     return loadCache.get(l)!
   }
-  const available = (ex: Exercise) => canDo(ex, caps, (l) => loads(l).length > 0)
+  const available = (ex: Exercise) =>
+    !excluded.includes(ex.id) &&
+    canDo(ex, caps, (l) => loads(l).length > 0) &&
+    (ex.pattern !== 'carry' || Math.max(0, ...loads(ex.loading)) >= MIN_CARRY_LB)
   const pick = (pattern: Pattern, exclude: string[] = []) =>
     EXERCISES.find((e) => e.pattern === pattern && available(e) && !exclude.includes(e.id))
   return { pick, loads, available }
@@ -51,6 +57,7 @@ export function estimateMinutes(blocks: PlanBlock[]): number {
 }
 
 function schemeFor(ex: Exercise, main: boolean): { scheme: Scheme; rest: number } {
+  if (ex.loading === 'barbell' && !main) return { scheme: { sets: 2, reps: 8, repsMax: 12 }, rest: 75 }
   if (ex.loading === 'barbell') {
     const sets = ex.id === 'bb_deadlift' ? 2 : 3
     return { scheme: { sets, reps: 5 }, rest: ex.lowerBody ? 180 : 150 }
@@ -98,7 +105,7 @@ function strengthWarmup(available: (e: Exercise) => boolean): PlanBlock {
 }
 
 function buildStrength(ctx: PlanContext): Plan {
-  const { pick, loads, available } = makePicker(ctx.equipment)
+  const { pick, loads, available } = makePicker(ctx.equipment, ctx.profile.excludedExercises)
   const notes: string[] = []
   const patterns: Pattern[] = ctx.variant === 'A' ? ['squat', 'hpush', 'hpull'] : ['hinge', 'vpush', 'vpull']
 
@@ -117,11 +124,15 @@ function buildStrength(ctx: PlanContext): Plan {
   })
   if (mains[0]) mains[0].cue = `Warm-up sets first: light × 8, ~60% × 5, ~80% × 3. ${mains[0].cue}`
 
-  const accessoryPatterns: Pattern[] = ctx.variant === 'A' ? ['single_leg', 'core', 'carry'] : ['carry', 'core', 'single_leg']
+  // Accessories, in the order you do them: legs, arms (biceps + triceps), core, carry.
+  const accessoryPatterns: Pattern[] = ['single_leg', 'biceps', 'triceps', 'core', 'carry']
   const accessories: PlanItem[] = []
   for (const p of accessoryPatterns) {
-    // Vary core work between days: A gets the landmine rotation or plank, B something else.
-    const ex = pick(p, [...used, ...(ctx.variant === 'B' ? ['plank', 'lm_rotation'] : ['side_plank'])])
+    // Vary between days: A gets the landmine rotation or plank, B a different core move;
+    // B uses the second-choice arm exercise when there is one.
+    const dayExclusions = ctx.variant === 'B' ? ['plank', 'lm_rotation'] : ['side_plank']
+    let ex = pick(p, [...used, ...dayExclusions])
+    if (ex && ctx.variant === 'B' && (p === 'biceps' || p === 'triceps')) ex = pick(p, [...used, ex.id]) ?? ex
     if (!ex) continue
     used.push(ex.id)
     if (ex.pattern === 'core' && ex.loading === 'bodyweight' && ex.id !== 'hanging_knee_raise') {
@@ -138,8 +149,8 @@ function buildStrength(ctx: PlanContext): Plan {
 
   // Fit the time range: never over the longest, topped up if under the shortest.
   const { min, max: budget } = sessionRange(ctx.profile)
-  // Over budget? Drop carries first, then single-leg work; keep core.
-  for (const pattern of ['carry', 'single_leg'] as Pattern[]) {
+  // Over budget? Drop in this order: carry, single-leg, triceps, biceps. Core stays.
+  for (const pattern of ['carry', 'single_leg', 'triceps', 'biceps'] as Pattern[]) {
     const idx = accessories.findIndex((it) => EXERCISE_BY_ID.get(it.exerciseId)?.pattern === pattern)
     if (estimateMinutes(blocks) > budget && idx >= 0 && accessories.length > 1) accessories.splice(idx, 1)
   }
@@ -179,7 +190,7 @@ function buildStrength(ctx: PlanContext): Plan {
 }
 
 function buildMobility(ctx: PlanContext): Plan {
-  const { available } = makePicker(ctx.equipment)
+  const { available } = makePicker(ctx.equipment, ctx.profile.excludedExercises)
   const has = (id: string) => available(EXERCISE_BY_ID.get(id)!)
   const cardio = ['wu_cardio', 'wu_rope', 'wu_jacks'].find(has)!
   const blocks: PlanBlock[] = [
@@ -231,5 +242,13 @@ function buildMobility(ctx: PlanContext): Plan {
 }
 
 export function buildRulesPlan(ctx: PlanContext): Plan {
-  return ctx.type === 'mobility' ? buildMobility(ctx) : buildStrength(ctx)
+  const plan = ctx.type === 'mobility' ? buildMobility(ctx) : buildStrength(ctx)
+  // Warm-up and mobility moves are fixed lists, so remove anything you've excluded here.
+  const excluded = new Set(ctx.profile.excludedExercises ?? [])
+  if (excluded.size) {
+    for (const b of plan.blocks) b.items = b.items.filter((it) => !excluded.has(it.exerciseId))
+    plan.blocks = plan.blocks.filter((b) => b.items.length > 0)
+    plan.estimatedMinutes = estimateMinutes(plan.blocks)
+  }
+  return plan
 }
