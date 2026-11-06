@@ -23,6 +23,7 @@ export interface Exercise {
   loading: Loading
   requires: Capability[] // all of these must be available
   lowerBody?: boolean
+  alternating?: boolean // one side per set: sets alternate Right / Left
   assistable?: boolean // can be done with a band for help (log which sets used it)
   cue: string
 }
@@ -83,10 +84,10 @@ export const EXERCISES: Exercise[] = [
   // Core
   { id: 'lm_rotation', name: 'Landmine rotation', pattern: 'core', loading: 'landmine', requires: ['barbell', 'landmine'], cue: 'Arms long, swing the bar end hip to hip by turning your torso and pivoting your feet. Start light. Reps are per side.' },
   { id: 'plank', name: 'Plank', pattern: 'core', loading: 'bodyweight', requires: [], cue: 'Squeeze glutes, ribs down, straight line head to heels.' },
-  { id: 'dead_bug', name: 'Dead bug', pattern: 'core', loading: 'bodyweight', requires: [], cue: 'Low back pressed into the floor, slowly extend opposite arm and leg.' },
-  { id: 'side_plank', name: 'Side plank', pattern: 'core', loading: 'bodyweight', requires: [], cue: 'Hips high, body straight. Time is per side.' },
+  { id: 'dead_bug', name: 'Dead bug', pattern: 'core', loading: 'bodyweight', requires: [], alternating: true, cue: 'Low back pressed into the floor, slowly extend opposite arm and leg.' },
+  { id: 'side_plank', name: 'Side plank', pattern: 'core', loading: 'bodyweight', requires: [], alternating: true, cue: 'Hips high, body straight. Alternate sides each set.' },
   { id: 'hollow_hold', name: 'Hollow body hold', pattern: 'core', loading: 'bodyweight', requires: [], cue: 'Low back flat, arms and legs long and just off the floor.' },
-  { id: 'bird_dog', name: 'Bird dog', pattern: 'core', loading: 'bodyweight', requires: [], cue: 'Reach opposite arm and leg long without rocking your hips.' },
+  { id: 'bird_dog', name: 'Bird dog', pattern: 'core', loading: 'bodyweight', requires: [], alternating: true, cue: 'Reach opposite arm and leg long without rocking your hips.' },
   { id: 'hanging_knee_raise', name: 'Hanging knee raise', pattern: 'core', loading: 'bodyweight', requires: ['pullup_bar'], cue: 'No swinging; curl your pelvis up, not just your knees.' },
   // Warm-up
   { id: 'wu_rope', name: 'Easy jump rope', pattern: 'warmup', loading: 'bodyweight', requires: ['jump_rope'], cue: 'Light and easy, just get warm.' },

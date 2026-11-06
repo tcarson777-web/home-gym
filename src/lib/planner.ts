@@ -47,7 +47,14 @@ function makePicker(equipment: Equipment[], excluded: string[] = []) {
 
 function timeItem(id: string, seconds: number, opts: Partial<PlanItem> = {}): PlanItem {
   const ex = EXERCISE_BY_ID.get(id)!
-  return { exerciseId: id, name: ex.name, kind: 'time', sets: 1, seconds, restSec: 0, cue: ex.cue, ...opts }
+  const item: PlanItem = { exerciseId: id, name: ex.name, kind: 'time', sets: 1, seconds, restSec: 0, cue: ex.cue, ...opts }
+  // Left/right moves: one side per set, so an even number of sets (R, L, R, L).
+  if (ex.alternating) {
+    item.alternating = true
+    item.perSide = false
+    if (item.sets % 2) item.sets += 1
+  }
+  return item
 }
 
 /** Rough minutes for a block list, including rest, setup and transitions. */
@@ -172,7 +179,7 @@ function buildStrength(ctx: PlanContext): Plan {
     if (!ex) continue
     used.push(ex.id)
     if (ex.pattern === 'core' && ex.loading === 'bodyweight' && ex.id !== 'hanging_knee_raise') {
-      accessories.push(timeItem(ex.id, ex.id === 'side_plank' ? 30 : 40, { sets: 3, restSec: 45, perSide: ex.id === 'side_plank' }))
+      accessories.push(timeItem(ex.id, ex.id === 'side_plank' ? 30 : 40, { sets: 3, restSec: 45 }))
     } else if (ex.pattern === 'carry') {
       const l = loads(ex.loading)
       accessories.push(timeItem(ex.id, 40, { sets: 3, restSec: 60, targetWeight: l[Math.floor(l.length * 0.6)] }))
@@ -208,7 +215,7 @@ function buildStrength(ctx: PlanContext): Plan {
   if (estimateMinutes(blocks) < min) {
     const extra = pick('core', [...used, 'hanging_knee_raise', 'lm_rotation'])
     if (extra) {
-      const item = timeItem(extra.id, extra.id === 'side_plank' ? 30 : 40, { sets: 3, restSec: 45, perSide: extra.id === 'side_plank' })
+      const item = timeItem(extra.id, extra.id === 'side_plank' ? 30 : 40, { sets: 3, restSec: 45 })
       accessories.push(item)
       if (estimateMinutes(blocks) > budget) accessories.pop()
     }
@@ -254,11 +261,11 @@ function buildMobility(ctx: PlanContext): Plan {
       ],
     },
     {
-      name: 'Core circuit (3 rounds)',
+      name: 'Core',
       items: [
         timeItem('dead_bug', 40, { sets: 3, restSec: 20 }),
         timeItem('bird_dog', 40, { sets: 3, restSec: 20 }),
-        timeItem('side_plank', 25, { sets: 3, restSec: 20, perSide: true }),
+        timeItem('side_plank', 25, { sets: 3, restSec: 20 }),
         timeItem('hollow_hold', 25, { sets: 3, restSec: 30 }),
       ],
     },

@@ -148,3 +148,11 @@ textarea.input { min-height: 80px; resize: vertical; }
 .swap-btn { min-width: 44px; min-height: 44px; border-radius: 10px; border: 1px solid var(--border); background: transparent; color: var(--muted); font-size: 1.1rem; flex: none; }
 .preview-detail { padding: 4px 0 12px; }
 .skipped { text-decoration: line-through; color: var(--muted); }
+
+/* Interval timer for timed exercises */
+.interval { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 12px; border: 2px solid var(--border); }
+.interval.work { border-color: var(--good); background: rgba(62, 207, 142, 0.08); }
+.interval.rest { border-color: var(--warn); background: rgba(245, 196, 81, 0.08); }
+.interval.ready { border-color: var(--accent); }
+.interval-label { font-size: 1.5rem; font-weight: 800; }
+.interval-time { font-size: 2.6rem; font-weight: 800; font-variant-numeric: tabular-nums; }

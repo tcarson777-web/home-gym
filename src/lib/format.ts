@@ -8,6 +8,9 @@ export function fmtTime(sec: number) {
 /** "3 × 5 @ 135 lb", "3 × 8–12 each side", "40s each side" */
 export function repsLabel(it: PlanItem) {
   const side = it.perSide ? ' each side' : ''
+  if (it.kind === 'time' && it.alternating) {
+    return `${it.sets} × ${it.seconds}s, alternating sides`
+  }
   if (it.kind === 'time') {
     const weight = it.targetWeight ? ` @ ${it.targetWeight} lb each hand` : ''
     return `${it.sets > 1 ? `${it.sets} × ` : ''}${it.seconds}s${side}${weight}`

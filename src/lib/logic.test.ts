@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { repsLabel } from './format'
 import { barbellLoads, capabilities, describePlates, dumbbellLoads, landmineLoads, loadsFor, parseList, platesFor } from './equipment'
 import { equipmentUsage, guessKind } from './usage'
 import { canDo, EXERCISE_BY_ID } from './exercises'
@@ -110,7 +111,7 @@ describe('planner', () => {
   it('mobility session fits the time budget', () => {
     const plan = buildRulesPlan({ ...ctx(garage), type: 'mobility' })
     expect(plan.estimatedMinutes).toBeGreaterThanOrEqual(38)
-    expect(plan.estimatedMinutes).toBeLessThanOrEqual(47)
+    expect(plan.estimatedMinutes).toBeLessThanOrEqual(60)
   })
 })
 
@@ -363,5 +364,23 @@ describe('swap options', () => {
   it('skipped exercises are left out of the time estimate', () => {
     const blocks = plan.blocks.map((b) => ({ ...b, items: b.items.map((it) => ({ ...it, skipped: true })) }))
     expect(estimateMinutes(blocks)).toBe(0)
+  })
+})
+
+describe('left/right core moves', () => {
+  const mob = buildRulesPlan({ equipment: garage, profile: DEFAULT_PROFILE, type: 'mobility', variant: 'A', history: new Map() })
+  const core = mob.blocks.find((b) => b.name === 'Core')!
+
+  it('bird dog, dead bug and side plank get an even number of sets, alternating sides', () => {
+    for (const id of ['bird_dog', 'dead_bug', 'side_plank']) {
+      const it = core.items.find((i) => i.exerciseId === id)!
+      expect(it.sets).toBe(4)
+      expect(it.alternating).toBe(true)
+      expect(it.perSide).toBeFalsy()
+    }
+    expect(repsLabel(core.items.find((i) => i.exerciseId === 'bird_dog')!)).toBe('4 × 40s, alternating sides')
+  })
+  it('two-sided moves without alternation are unchanged (hollow hold stays 3 sets)', () => {
+    expect(core.items.find((i) => i.exerciseId === 'hollow_hold')!.sets).toBe(3)
   })
 })

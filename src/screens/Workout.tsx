@@ -379,6 +379,22 @@ function RepsItem({ item, logged, expanded, loads, bandLevels, equipment, onLog,
   )
 }
 
+// One run of a timed exercise: get-ready, then work / rest for every set not yet done.
+type Phase = { kind: 'ready' | 'work' | 'rest'; n: number; secs: number }
+
+const sideOf = (item: PlanItem, n: number) => (item.alternating ? (n % 2 === 0 ? 'Right' : 'Left') : '')
+const READY_SECS = 5
+
+function buildPhases(item: PlanItem, todo: number[]): Phase[] {
+  const work = (item.seconds ?? 30) * (item.perSide ? 2 : 1)
+  const phases: Phase[] = [{ kind: 'ready', n: todo[0], secs: READY_SECS }]
+  todo.forEach((n, j) => {
+    phases.push({ kind: 'work', n, secs: work })
+    if (j < todo.length - 1 && item.restSec > 0) phases.push({ kind: 'rest', n: todo[j + 1], secs: item.restSec })
+  })
+  return phases
+}
+
 function TimeItem({ item, checked, onToggle, onAllDone, expanded }: {
   item: PlanItem
   checked: (n: number) => boolean
@@ -386,54 +402,92 @@ function TimeItem({ item, checked, onToggle, onAllDone, expanded }: {
   onAllDone: () => void
   expanded: boolean
 }) {
-  const [timer, setTimer] = useState<{ n: number; endsAt: number; total: number } | null>(null)
-  const now = useNow(timer != null)
+  // The whole sequence runs from one tap: beep = go, double beep = rest, triple beep = finished.
+  const [run, setRun] = useState<{ startedAt: number; phases: Phase[] } | null>(null)
+  const now = useNow(run != null)
+  const lastPhase = useRef(-1)
   const switched = useRef(false)
 
+  // Where are we in the sequence? Worked out from the clock, so it stays accurate.
+  let idx = -1
+  let left = 0
+  if (run) {
+    let t = (now - run.startedAt) / 1000
+    for (let i = 0; i < run.phases.length; i++) {
+      if (t < run.phases[i].secs) { idx = i; left = run.phases[i].secs - t; break }
+      t -= run.phases[i].secs
+    }
+    if (idx === -1) idx = run.phases.length // finished
+  }
+  const phase = run && idx < run.phases.length ? run.phases[idx] : null
+
   useEffect(() => {
-    if (!timer) return
-    const left = (timer.endsAt - now) / 1000
-    if (item.perSide && !switched.current && left <= timer.total / 2) {
+    if (!run || idx === lastPhase.current) return
+    // Tick off every work phase we've moved past (also covers a phone that slept through one).
+    for (let i = 0; i < Math.min(idx, run.phases.length); i++) {
+      const ph = run.phases[i]
+      if (ph.kind === 'work' && !checked(ph.n)) onToggle(ph.n)
+    }
+    lastPhase.current = idx
+    switched.current = false
+    if (idx >= run.phases.length) {
+      alertUser(3)
+      setRun(null)
+      onAllDone()
+    } else if (run.phases[idx].kind === 'work') alertUser(1)
+    else if (run.phases[idx].kind === 'rest') alertUser(2)
+  }, [idx, run, checked, onToggle, onAllDone])
+
+  // Hold-for-time moves done on both sides in one set: beep halfway to switch.
+  useEffect(() => {
+    if (phase?.kind === 'work' && item.perSide && !switched.current && left <= phase.secs / 2) {
       switched.current = true
       alertUser(1)
     }
-    if (left <= 0) {
-      alertUser(2)
-      const n = timer.n
-      setTimer(null)
-      if (!checked(n)) onToggle(n)
-      if (Array.from({ length: item.sets }, (_, j) => j === n || checked(j)).every(Boolean)) onAllDone()
-    }
-  }, [now, timer, item, checked, onToggle, onAllDone])
+  }, [phase, left, item.perSide])
 
-  const total = (item.seconds ?? 30) * (item.perSide ? 2 : 1)
-  const nextN = Array.from({ length: item.sets }, (_, j) => j).find((j) => !checked(j))
+  const todo = Array.from({ length: item.sets }, (_, j) => j).filter((j) => !checked(j))
+  const totalSecs = todo.length ? buildPhases(item, todo).reduce((t, p) => t + (p.kind === 'ready' ? 0 : p.secs), 0) : 0
+  const dotLabel = (n: number) => (item.alternating ? `${sideOf(item, n)[0]}${Math.floor(n / 2) + 1}` : item.sets > 1 ? String(n + 1) : 'Done')
 
   return (
     <div className="stack">
       <div className="set-dots">
         {Array.from({ length: item.sets }, (_, n) => (
           <button key={n} className={checked(n) ? 'on' : ''} onClick={() => onToggle(n)} aria-label={`set ${n + 1} done`}>
-            {checked(n) ? '✓' : item.sets > 1 ? n + 1 : 'Done'}
+            {checked(n) ? '✓' : dotLabel(n)}
           </button>
         ))}
-        {expanded && nextN != null && !timer && (
-          <button
-            onClick={() => {
-              unlockAudio()
-              switched.current = false
-              setTimer({ n: nextN, endsAt: Date.now() + total * 1000, total })
-            }}
-          >
-            ▶ {fmt(total)}
-          </button>
-        )}
       </div>
-      {timer && (
-        <div className="row between">
-          <span style={{ fontSize: '2rem', fontWeight: 800 }}>{fmt((timer.endsAt - now) / 1000)}</span>
-          <span className="muted small">{item.perSide ? (switched.current ? 'Second side' : 'First side — beep = switch') : ''}</span>
-          <button className="btn sm" onClick={() => setTimer(null)}>Stop</button>
+      {expanded && todo.length > 0 && !run && (
+        <button
+          className="btn primary"
+          onClick={() => {
+            unlockAudio()
+            lastPhase.current = -1
+            setRun({ startedAt: Date.now(), phases: buildPhases(item, todo) })
+          }}
+        >
+          ▶ Start {todo.length > 1 ? `all ${todo.length} sets` : ''} · {fmt(totalSecs)}
+          {todo.length > 1 && item.restSec > 0 ? ` (incl. ${item.restSec}s rests)` : ''}
+        </button>
+      )}
+      {phase && (
+        <div className={`interval ${phase.kind}`}>
+          <div className="row between">
+            <div>
+              <div className="interval-label">
+                {phase.kind === 'ready' ? 'Get ready' : phase.kind === 'rest' ? 'Rest' : item.alternating ? `${sideOf(item, phase.n)} side` : 'Go'}
+              </div>
+              <div className="muted small">
+                {phase.kind === 'work'
+                  ? `Set ${phase.n + 1} of ${item.sets}${item.perSide ? (switched.current ? ' · second side' : ' · beep halfway = switch sides') : ''}`
+                  : `Next: ${item.alternating ? `${sideOf(item, phase.n)} side · ` : ''}set ${phase.n + 1} of ${item.sets}`}
+              </div>
+            </div>
+            <span className="interval-time">{fmt(left)}</span>
+          </div>
+          <button className="btn sm" onClick={() => setRun(null)}>Stop</button>
         </div>
       )}
     </div>

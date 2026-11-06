@@ -72,6 +72,7 @@ export interface PlanItem {
   reps?: number // target reps per set (kind = 'reps')
   repsMax?: number // upper end of a rep range, if any
   seconds?: number // per set (kind = 'time')
+  alternating?: boolean // sets alternate sides: Right, Left, Right, Left
   perSide?: boolean // time or reps are per side / per arm / per leg
   targetWeight?: number // lb; undefined = bodyweight or "pick a weight"
   restSec: number
