@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest'
+import { backupStatus } from './backup'
 import { repsLabel } from './format'
 import { barbellLoads, capabilities, describePlates, dumbbellLoads, landmineLoads, loadsFor, parseList, platesFor } from './equipment'
 import { equipmentUsage, guessKind } from './usage'
 import { canDo, EXERCISE_BY_ID } from './exercises'
 import { buildRulesPlan, estimateMinutes, swapOptions, type PlanContext } from './planner'
 import { prescribe, type Performance } from './progression'
-import type { Equipment, Profile, SetLog } from './types'
+import type { Equipment, Profile, Session, SetLog } from './types'
 import { DEFAULT_PROFILE, sessionRange } from './db'
 import { weekStatus } from './schedule'
 
@@ -382,5 +383,29 @@ describe('left/right core moves', () => {
   })
   it('two-sided moves without alternation are unchanged (hollow hold stays 3 sets)', () => {
     expect(core.items.find((i) => i.exerciseId === 'hollow_hold')!.sets).toBe(3)
+  })
+})
+
+describe('backup reminder', () => {
+  const done = (date: string): Session => ({ date, finishedAt: date, type: 'strength', status: 'done', plan: {} as never, bonus: false, checked: [] })
+  const now = new Date('2026-11-15T12:00:00Z').getTime()
+
+  it('no workouts yet: no reminder', () => {
+    expect(backupStatus([], undefined, undefined, now).remind).toBe(false)
+  })
+  it('workouts but never backed up: remind', () => {
+    const s = backupStatus([done('2026-11-14T10:00:00Z')], undefined, undefined, now)
+    expect(s).toMatchObject({ remind: true, workoutsSince: 1 })
+  })
+  it('recent backup: no reminder', () => {
+    expect(backupStatus([done('2026-11-14T10:00:00Z')], '2026-11-10T10:00:00Z', undefined, now).remind).toBe(false)
+  })
+  it('old backup with new workouts since: remind; with none since: no reminder', () => {
+    expect(backupStatus([done('2026-11-14T10:00:00Z')], '2026-10-20T10:00:00Z', undefined, now).remind).toBe(true)
+    expect(backupStatus([done('2026-10-19T10:00:00Z')], '2026-10-20T10:00:00Z', undefined, now).remind).toBe(false)
+  })
+  it('"Later" hides it until the snooze ends', () => {
+    expect(backupStatus([done('2026-11-14T10:00:00Z')], undefined, '2026-11-17T12:00:00Z', now).remind).toBe(false)
+    expect(backupStatus([done('2026-11-14T10:00:00Z')], undefined, '2026-11-14T12:00:00Z', now).remind).toBe(true)
   })
 })

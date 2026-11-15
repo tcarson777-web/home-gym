@@ -1,6 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useEffect, useState } from 'react'
-import { db, DEFAULT_PROFILE, exportBackup, importBackup } from '../lib/db'
+import { daysAgo, saveBackupFile } from '../lib/backup'
+import { db, DEFAULT_PROFILE, importBackup } from '../lib/db'
 import { EXERCISE_BY_ID } from '../lib/exercises'
 import type { Experience, Profile } from '../lib/types'
 
@@ -31,25 +32,10 @@ export default function SettingsScreen() {
     setSaved(true)
   }
 
+  const lastBackupAt = useLiveQuery(() => db.settings.get('lastBackupAt'))?.value as string | undefined
+
   async function backup() {
-    const json = await exportBackup()
-    const name = `home-gym-backup-${new Date().toISOString().slice(0, 10)}.json`
-    const file = new File([json], name, { type: 'application/json' })
-    // On Android this opens the share sheet (e.g. save to Google Drive); otherwise it downloads.
-    if (navigator.canShare?.({ files: [file] })) {
-      try {
-        await navigator.share({ files: [file], title: 'Home Gym backup' })
-        return
-      } catch {
-        // cancelled; fall through to download
-      }
-    }
-    const url = URL.createObjectURL(file)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = name
-    a.click()
-    URL.revokeObjectURL(url)
+    if (await saveBackupFile()) setMsg('Backup saved ✓')
   }
 
   async function restore(f: File | undefined) {
@@ -129,6 +115,7 @@ export default function SettingsScreen() {
         <p className="muted small">
           Your data lives only on this phone. Clearing Chrome's site data or uninstalling the app erases it, so save a backup every few weeks (e.g. to Google Drive).
         </p>
+        <p className="small">{lastBackupAt ? `Last backup: ${daysAgo(lastBackupAt)}` : 'No backup saved yet.'}</p>
         <button className="btn" onClick={backup}>Save backup file</button>
         <label className="btn center" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           Restore from backup…

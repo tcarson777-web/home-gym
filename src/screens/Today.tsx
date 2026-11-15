@@ -2,6 +2,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { useMemo, useState } from 'react'
 import PlanPreview from '../components/PlanPreview'
 import SwapSheet from '../components/SwapSheet'
+import { backupStatus, daysAgo, saveBackupFile, snoozeBackupReminder } from '../lib/backup'
 import { db, DEFAULT_PROFILE, sessionRange } from '../lib/db'
 import { estimateMinutes } from '../lib/planner'
 import { buildNextPlan, excludeExercise, getSwapOptions, startSession, weekStatus } from '../lib/schedule'
@@ -20,6 +21,9 @@ export default function TodayScreen({ activeSession, onOpenWorkout, goTo }: Prop
   const equipmentCount = useLiveQuery(() => db.equipment.count(), [], 0)
   const profile = useLiveQuery(() => db.profile.get('me'))
   const [busy, setBusy] = useState(false)
+  const lastBackupAt = useLiveQuery(() => db.settings.get('lastBackupAt'))?.value as string | undefined
+  const snoozeUntil = useLiveQuery(() => db.settings.get('backupSnoozeUntil'))?.value as string | undefined
+  const backup = backupStatus(sessions, lastBackupAt, snoozeUntil)
 
   const target = (profile ?? DEFAULT_PROFILE).sessionsPerWeek
   const week = weekStatus(sessions, target)
@@ -93,6 +97,19 @@ export default function TodayScreen({ activeSession, onOpenWorkout, goTo }: Prop
         <button className="notice" style={{ textAlign: 'left' }} onClick={() => goTo('settings')}>
           Tell the app about your training experience and any injuries in Settings →
         </button>
+      )}
+
+      {backup.remind && (
+        <div className="notice stack" style={{ gap: 10 }}>
+          <span>
+            {backup.lastBackupAt ? `Last backup ${daysAgo(backup.lastBackupAt)}` : 'No backup yet'} · {backup.workoutsSince} workout
+            {backup.workoutsSince === 1 ? '' : 's'} only on this phone. Save a backup to Google Drive so a lost or new phone doesn't lose them.
+          </span>
+          <div className="row">
+            <button className="btn primary sm" onClick={() => void saveBackupFile()}>Save backup now</button>
+            <button className="btn ghost sm" onClick={() => void snoozeBackupReminder()}>Later</button>
+          </div>
+        </div>
       )}
 
       <div className="card stack">
