@@ -78,6 +78,7 @@ export interface PlanItem {
   restSec: number
   cue?: string
   isMainLift?: boolean
+  superset?: string // e.g. "A1" / "A2": alternate sets with the item sharing the letter
   swappedFrom?: string // name of the exercise this replaced for today
   skipped?: boolean // skipped for today only
 }

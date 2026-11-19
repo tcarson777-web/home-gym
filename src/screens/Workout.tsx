@@ -176,7 +176,15 @@ export default function WorkoutScreen({ sessionId, onClose }: { sessionId: numbe
                 <button className="row between" style={{ background: 'none', border: 0, padding: 0, textAlign: 'left' }} onClick={() => setActiveKey(isActive ? null : k)}>
                   <div className="grow">
                     <h3>{done ? '✓ ' : ''}{it.name}</h3>
-                    <p className="muted small">{repsLabel(it)}{it.swappedFrom ? ` · instead of ${it.swappedFrom}` : ''}</p>
+                    <p className="muted small">
+                      {repsLabel(it)}
+                      {it.swappedFrom ? ` · instead of ${it.swappedFrom}` : ''}
+                    </p>
+                    {it.superset && (
+                      <p className="small" style={{ color: 'var(--accent)' }}>
+                        Superset {it.superset} · alternate sets with {block.items.find((x) => x !== it && x.superset?.[0] === it.superset![0])?.name}
+                      </p>
+                    )}
                   </div>
                   {it.restSec > 0 && <span className="pill">rest {fmt(it.restSec)}</span>}
                 </button>
@@ -215,7 +223,10 @@ export default function WorkoutScreen({ sessionId, onClose }: { sessionId: numbe
                       // Warm-up sets get a short rest; working sets the planned one.
                       setRestEndsAt(Date.now() + (warmup ? Math.min(60, it.restSec) : it.restSec) * 1000)
                       const working = (setsByItem.get(k) ?? []).filter((x) => !x.warmup).length + (warmup ? 0 : 1)
-                      if (!warmup && working === it.sets) autoFollow()
+                      // Supersets: go straight to the partner exercise until both are done.
+                      const partner = it.superset ? block.items.findIndex((x, j) => j !== i && x.superset?.[0] === it.superset![0]) : -1
+                      if (!warmup && partner >= 0 && !isComplete(b, partner, block.items[partner])) setActiveKey(key(b, partner))
+                      else if (!warmup && working === it.sets) autoFollow()
                     }}
                     onUndo={(id) => db.sets.delete(id)}
                   />

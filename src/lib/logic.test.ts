@@ -232,14 +232,28 @@ describe('arms, carries and removed exercises', () => {
     { kind: 'kettlebells', name: 'KB', weights: [10] },
   ]
 
-  it('both strength days include a biceps and a triceps exercise, within 60 min', () => {
+  it('every strength day keeps lunges and has arm work; the week covers biceps and triceps; within 60 min', () => {
+    const weekPatterns = new Set<string>()
     for (const v of ['A', 'B'] as const) {
       const plan = buildRulesPlan(ctx(myGarage, v))
       const pats = plan.blocks.flatMap((b) => b.items.map((i) => EXERCISE_BY_ID.get(i.exerciseId)!.pattern))
-      expect(pats).toContain('biceps')
-      expect(pats).toContain('triceps')
+      pats.forEach((p) => weekPatterns.add(p))
+      expect(pats).toContain('single_leg')
+      expect(pats.some((p) => p === 'biceps' || p === 'triceps')).toBe(true)
       expect(plan.estimatedMinutes).toBeLessThanOrEqual(60)
     }
+    expect(weekPatterns).toContain('biceps')
+    expect(weekPatterns).toContain('triceps')
+  })
+  it('lunges and curls are paired as a superset: short hop after the first, full rest after the second', () => {
+    const acc = buildRulesPlan(ctx(myGarage, 'A')).blocks[2].items
+    const a1 = acc.find((i) => i.superset === 'A1')!
+    const a2 = acc.find((i) => i.superset === 'A2')!
+    expect(EXERCISE_BY_ID.get(a1.exerciseId)!.pattern).toBe('single_leg')
+    expect(EXERCISE_BY_ID.get(a2.exerciseId)!.pattern).toBe('biceps')
+    expect(acc.indexOf(a2)).toBe(acc.indexOf(a1) + 1)
+    expect(a1.restSec).toBe(15)
+    expect(a2.restSec).toBeGreaterThanOrEqual(60)
   })
   it('varies arm exercises between A and B when there are options', () => {
     const arm = (v: 'A' | 'B') => ids(ctx(myGarage, v)).filter((i) => ['biceps', 'triceps'].includes(EXERCISE_BY_ID.get(i)!.pattern))

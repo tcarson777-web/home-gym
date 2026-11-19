@@ -51,6 +51,7 @@ export default function PlanPreview({ plan, onSwap, onUnskip }: Props) {
                       >
                         <span className="preview-thumb"><Figure exerciseId={it.exerciseId} size={44} first /></span>
                         <span style={{ minWidth: 0 }}>
+                          {it.superset && !it.skipped && <span className="pill accent" style={{ marginRight: 6 }}>{it.superset}</span>}
                           <span className={it.skipped ? 'skipped' : ''}>{it.isMainLift ? <b>{it.name}</b> : it.name}</span>
                           {it.swappedFrom && !it.skipped && <span className="muted small" style={{ display: 'block' }}>instead of {it.swappedFrom}</span>}
                           {it.skipped && <span className="muted small" style={{ display: 'block' }}>Skipped today</span>}
@@ -62,7 +63,7 @@ export default function PlanPreview({ plan, onSwap, onUnskip }: Props) {
                         <>
                           <span className="preview-rx">
                             {repsLabel(it)}
-                            {it.restSec > 0 && it.kind === 'reps' && <span className="muted"> · rest {fmtTime(it.restSec)}</span>}
+                            {it.kind === 'reps' && (it.superset?.endsWith('1') ? <span className="muted"> → {it.superset[0]}2</span> : it.restSec > 0 && <span className="muted"> · rest {fmtTime(it.restSec)}</span>)}
                           </span>
                           {onSwap && (
                             <button className="swap-btn" aria-label={`Swap or skip ${it.name}`} onClick={() => onSwap(b, i)}>⇄</button>
@@ -80,6 +81,9 @@ export default function PlanPreview({ plan, onSwap, onUnskip }: Props) {
                   </div>
                 )
               })}
+            {open && block.items.some((it) => it.superset) && (
+              <p className="muted small">A1 + A2 = superset: one set of each back to back, then rest.</p>
+            )}
             {open && block.items.some((it) => it.isMainLift && it.targetWeight == null && it.kind === 'reps' && !it.skipped) && (
               <p className="muted small">No weight shown = first time doing it. You'll pick a starting weight during the workout.</p>
             )}

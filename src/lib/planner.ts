@@ -134,6 +134,37 @@ function strengthWarmup(available: (e: Exercise) => boolean): PlanBlock {
   }
 }
 
+// Superset pairs: alternate one set of each, resting after the pair rather than after every set.
+const SUPERSET_HOP_SEC = 15 // time to move from the first exercise to the second
+
+/** Pair consecutive rep-based accessories as A1/A2, B1/B2…; the first of a pair only gets a short hop. */
+function pairSupersets(items: PlanItem[]) {
+  const reps = items.filter((it) => it.kind === 'reps')
+  for (const it of reps) {
+    if (it.superset) {
+      const ex = EXERCISE_BY_ID.get(it.exerciseId)
+      // restore normal rest before re-pairing
+      if (ex) it.restSec = schemeFor(ex, 'accessory').rest
+      delete it.superset
+    }
+  }
+  for (let i = 0; i + 1 < reps.length; i += 2) {
+    const letter = String.fromCharCode(65 + i / 2)
+    reps[i].superset = `${letter}1`
+    reps[i].restSec = SUPERSET_HOP_SEC
+    reps[i + 1].superset = `${letter}2`
+  }
+  // Keep partners next to each other: each X2 goes straight after its X1.
+  const ordered: PlanItem[] = []
+  for (const it of items) {
+    if (it.superset?.endsWith('2')) continue
+    ordered.push(it)
+    const partner = it.superset && items.find((x) => x.superset === `${it.superset![0]}2`)
+    if (partner) ordered.push(partner)
+  }
+  items.splice(0, items.length, ...ordered)
+}
+
 function buildStrength(ctx: PlanContext): Plan {
   const { pick, loads, available } = makePicker(ctx.equipment, ctx.profile.excludedExercises)
   const notes: string[] = []
@@ -191,13 +222,21 @@ function buildStrength(ctx: PlanContext): Plan {
   const blocks: PlanBlock[] = [strengthWarmup(available), { name: 'Main lifts', items: mains }, { name: 'Accessories', items: accessories }]
 
   // Fit the time range: never over the longest, topped up if under the shortest.
+  // Rep-based accessories are paired into supersets first, which saves most of the rest time.
   const { min, max: budget } = sessionRange(ctx.profile)
-  // Over budget? Drop in this order: carry, single-leg, triceps, biceps. Core stays.
-  for (const pattern of ['carry', 'single_leg', 'triceps', 'biceps'] as Pattern[]) {
+  pairSupersets(accessories)
+  // Still over? Drop in this order: carry, triceps, biceps, single-leg. Core stays.
+  for (const pattern of ['carry', 'triceps', 'biceps', 'single_leg'] as Pattern[]) {
     const idx = accessories.findIndex((it) => EXERCISE_BY_ID.get(it.exerciseId)?.pattern === pattern)
-    if (estimateMinutes(blocks) > budget && idx >= 0 && accessories.length > 1) accessories.splice(idx, 1)
+    if (estimateMinutes(blocks) > budget && idx >= 0 && accessories.length > 1) {
+      accessories.splice(idx, 1)
+      pairSupersets(accessories)
+    }
   }
-  while (estimateMinutes(blocks) > budget && accessories.length > 1) accessories.pop()
+  while (estimateMinutes(blocks) > budget && accessories.length > 1) {
+    accessories.pop()
+    pairSupersets(accessories)
+  }
   for (const it of [...accessories].reverse()) if (estimateMinutes(blocks) > budget && it.sets > 2) it.sets--
   const lastMain = mains[mains.length - 1]
   if (lastMain && estimateMinutes(blocks) > budget && lastMain.sets > 2) lastMain.sets--
@@ -320,6 +359,11 @@ export function swapOptions(item: PlanItem, blockName: string, ctx: PlanContext,
         : e.pattern === 'carry'
           ? timeItem(e.id, item.seconds ?? 40, { sets: item.sets, restSec: item.restSec, targetWeight: loads(e.loading)[Math.floor(loads(e.loading).length * 0.6)] })
           : liftItem(e, role, ctx, loads(e.loading))
+      // Keep the superset slot: same label, and the first of a pair keeps its short hop.
+      if (item.superset && next.kind === 'reps') {
+        next.superset = item.superset
+        if (item.superset.endsWith('1')) next.restSec = item.restSec
+      }
       return { ...next, swappedFrom: item.swappedFrom ?? item.name }
     })
 }
